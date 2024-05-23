@@ -1,1 +1,7 @@
+__pycache__/
 .venv/
+.vscode/
+audio/
+images/
+output/
+cache/

@@ -1,2 +1,5 @@
 librosa
+matplotlib
 pygame
+opencv-python
+scipy
