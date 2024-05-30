@@ -1,5 +1,5 @@
 librosa
 matplotlib
-pygame
 opencv-python
+pygame
 scipy

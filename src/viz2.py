@@ -168,21 +168,29 @@ class Visualization:
         self.img_dir = f"images/{time.strftime('%Y-%m-%d_%H-%M-%S', time.gmtime())}/"
         os.makedirs(self.img_dir)
 
-    def draw_circle(self, grid, x_center, y_center, radius, color, blur=False):
-        """Use the midpoint circle algorithm to draw a filled circle on the grid. Apply a blur effect if needed."""
-        temp_grid = np.zeros_like(grid)
+    def draw_circle(self, grid: np.ndarray, x_center: int, y_center: int, radius: int, color: np.ndarray):
+        """Use the midpoint circle algorithm to draw a filled circle on the grid.
+
+        TODO: Add padding to fix black edges
+        """
+        temp_grid = np.zeros((2 * radius + 1, 2 * radius + 1, grid.shape[2]), dtype=np.uint8)
         x = radius
         y = 0
         err = 0
 
+        coordinates = []
         while x >= y:
-            for i in range(int(x_center - x), int(x_center + x)):
-                temp_grid[int(y_center + y), i, :] = color
-                temp_grid[int(y_center - y), i, :] = color
+            for i in range(radius - x, radius + x):
+                temp_grid[radius + y, i, :] = color
+                temp_grid[radius - y, i, :] = color
+                coordinates.append((radius + y, i))
+                coordinates.append((radius - y, i))
 
-            for i in range(int(x_center - y), int(x_center + y)):
-                temp_grid[int(y_center + x), i, :] = color
-                temp_grid[int(y_center - x), i, :] = color
+            for i in range(radius - y, radius + y):
+                temp_grid[radius + x, i, :] = color
+                temp_grid[radius - x, i, :] = color
+                coordinates.append((radius + x, i))
+                coordinates.append((radius - x, i))
 
             if err <= 0:
                 y += 1
@@ -191,11 +199,8 @@ class Visualization:
                 x -= 1
                 err -= 2 * x + 1
 
-        if blur:
-            for channel in range(temp_grid.shape[2]):
-                temp_grid[:, :, channel] = gaussian_filter(temp_grid[:, :, channel], sigma=radius/3)
-
-        np.add(grid, temp_grid, out=grid, casting="unsafe")
+        # Copy the blurred circle to the original grid
+        grid[y_center - radius : y_center + radius + 1, x_center - radius : x_center + radius + 1, :] = temp_grid
 
     def draw(self, time_position: int, screen: pygame.Surface = None) -> str | None:
         """Draw the grid for a given time frame.
@@ -246,8 +251,6 @@ class Visualization:
             }
         }
         """
-        grid = np.zeros((self.size, self.size, 3), dtype=np.uint8)
-
         # Get the energy of the audio at the given time position between 20 and 200 Hz
         bass_amp = self.audio.get_energy(time_position, 20, 200)
         bass_amp_max = -1000
@@ -255,21 +258,25 @@ class Visualization:
         bass_amp = np.interp(bass_amp, [bass_amp_min, bass_amp_max], [0, 255])
         # Scale the color to bass amplitude from 0 to 255
         alpha = np.interp(bass_amp, [0, 255], [150, 255])
-        palletes = [
-            ([255, 0, 0], [0, 0, 255]),  # Red and Blue
-            ([0, 255, 0], [255, 255, 0]),  # Greeen and yellow
-            ([255, 0, 255], [0, 255, 255]),  # Pink and Cyan
-        ]
         
-        # Cycle color palletes and positions based on the current beat
+        # Create a grid to draw the visualization on
+        grid = np.zeros((self.size, self.size, 4), dtype=np.uint8)
+
+        palletes = [
+            # ([255, 0, 0], [0, 0, 255]),  # Red and Blue
+            # ([0, 255, 0], [255, 255, 0]),  # Greeen and yellow
+            # ([255, 0, 255], [0, 255, 255]),  # Pink and Cyan
+            ([255, 0, 0, alpha], [0, 0, 255, alpha]),  # Red and Blue
+            ([0, 255, 0, alpha], [255, 255, 0, alpha]),  # Greeen and yellow
+            ([255, 0, 255, alpha], [0, 255, 255, alpha]),  # Pink and Cyan
+        ]
+
+        # Cycle color palletes based on the current beat
         t = time_position / self.fps
-        current_beat = self.audio.bpm * t // 60
+        current_beat = self.audio.bpm * t / 60
         current_beat_section = current_beat // 96
         current_beat_section = current_beat // 96
-        pallete_index = int(current_beat_section % len(palletes))
-        pallete = palletes[pallete_index]
-        # Scale the angle_step based on the pallete index between 1 and .25 descending
-        angle_step = np.interp(pallete_index, [0, len(palletes) - 1], [1, 0.25])
+        pallete = palletes[int(current_beat_section) % len(palletes)]
 
         min_r = 150
         max_r = 350
@@ -278,7 +285,7 @@ class Visualization:
         wave = np.interp(wave, (wave.min(), wave.max()), (-1, 1))
         for t in [-1, 1]:
             # for time_position in range(0, 180, 1):
-            for angle_position in np.arange(0, 180, angle_step):
+            for angle_position in np.arange(0, 180, 0.5):
                 index = int(np.interp(angle_position, [0, 180], [0, len(wave) - 1]))
                 r = np.interp(wave[index], [-1, 1], [min_r, max_r])
                 x = r * np.sin(angle_position) * t
@@ -290,20 +297,12 @@ class Visualization:
 
                 # Draw the vertex if r is greater than min_r
                 if r > min_r:
-                    # Original color (white)
-                    # color = np.array([255, 255, 255])
-                    # Scale the color between red and blue based on the angle_position
-                    # color = np.array([255, 0, 0]) * (1 - angle_position / 180) + np.array([0, 0, 255]) * (angle_position / 180)
-                    color = np.array(pallete[0]) * (1 - angle_position / 180) + np.array(pallete[1]) * (angle_position / 180)
+                    # Scale the color between pallette based on the angle_position
+                    color = np.array(pallete[0]) * (1 - angle_position / 180) + np.array(pallete[1]) * (
+                        angle_position / 180
+                    )
 
-                    # Scale the color by alpha
-                    scaled_color = (color * alpha / 255).astype(np.uint8)
-
-                    # Scale the individual pixel size by a factor of r, but limit the size between 1 and 6 pixels
-                    # increased_size = ((r - min_r) / (max_r - min_r)) * (6 - 1) + 1
-                    # increased_size = np.clip(int(increased_size), 1, 6)
-
-                    # Scale the individual pixel size by a factor of r, but limit the size between 1 and 6 pixels
+                    # Scale the individual pixel size by a factor of r, but limit the size between min_size and max_size
                     scaled_r = ((r - min_r) / (max_r - min_r)) * np.pi
                     # sine function ranges from -1 to 1, so we scale it to range
                     min_size = 2
@@ -312,17 +311,20 @@ class Visualization:
                     increased_size = np.clip(int(increased_size), min_size, max_size)
 
                     # Draw a circle of radius increased_size at (x, y) with color scaled_color
-                    self.draw_circle(grid, int(x), int(y), increased_size, scaled_color, True)
+                    self.draw_circle(grid, int(x), int(y), increased_size, color)
+
+        # Apply a gasussian blur to the grid
+        grid = gaussian_filter(grid, sigma=1)
 
         # Cache the grid
         # self.cache.save_grid_cache_item(time_position, grid)
 
         # "Shake" the grid in a random direction if the bass amplitude is greater than 230
-        if bass_amp > 230:
-            # Apply a smoothing function to the amount of shaking
-            shake = np.interp(bass_amp, [0, 255], [-10, 10])
-            # grid = np.roll(grid, np.random.randint(-10, 10), axis=np.random.randint(0, 2))
-            grid = np.roll(grid, shake, axis=np.random.randint(0, 2))
+        # if bass_amp > 230:
+        #     # Apply a smoothing function to the amount of shaking
+        #     shake = np.interp(bass_amp, [0, 255], [-10, 10])
+        #     # grid = np.roll(grid, np.random.randint(-10, 10), axis=np.random.randint(0, 2))
+        #     grid = np.roll(grid, shake, axis=np.random.randint(0, 2))
 
         # If a screen is provided, render the frame to the screen
         # Otherwise, save the frame to a file
@@ -406,7 +408,6 @@ class Visualization:
             f"output/{basename}_video.mp4",
             f"output/{basename}_output.mp4",
         )
-
 
         # Create a VideoWriter object
         print(f"Creating video from {len(image_files)} images...")

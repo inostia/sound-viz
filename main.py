@@ -1,34 +1,58 @@
+import argparse
 import os
 import time
 
-from gen_scripts.script_1 import transform
-from src.audio import Audio
-from src.make_grid import make_grid
+import pygame
+
+from src.viz import Visualization
 
 if __name__ == "__main__":
-    # Wait for user input to put a audio file
-    # audio_file = input("Enter the path to the audio file: ")
-    # audio_file = "audio/all_systems_go_xenotech.aif"
-    # audio_file = "audio/all_systems_go_xenotech_clipped.aif"
-    # audio_file = "audio/all_systems_go_xenotech_clipped2.aif"
-    audio_file = "audio/all_systems_go_xenotech_clipped3.aif"
+    parser = argparse.ArgumentParser(description="Process some audio.")
+    parser.add_argument("filename", type=str, help="The path to the audio file")
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["video", "pygame"],
+        help="The mode to run the visualization in (video or pygame render)",
+        default="video",
+    )
+
+    parser.add_argument(
+        "--size",
+        type=int,
+        help="The size of the visualization window",
+        default=720,
+    )
+
+    parser.add_argument(
+        "--video-async",
+        type=str,
+        help="Whether to generate the video asynchronously",
+        default="yes",
+    )
+
+    args = parser.parse_args()
+    filename = args.filename
+    mode = args.mode
+    video_async = args.video_async == "yes"
+    size = args.size
 
     # Check if the file exists
-    if not os.path.exists(audio_file):
+    if not os.path.exists(filename):
         print("File not found.")
         exit()
 
-    # Create an Audio object
-    audio = Audio(audio_file)
-
     start_time = time.time()
-    # Process the time frames
-    basename = os.path.basename(audio_file)
-    img_path = f"images/{time.strftime('%Y-%m-%d_%H-%M-%S', time.gmtime())}/"
-    os.makedirs(img_path)
-    sync = False
-    # sync = True
-    audio.create_visualization(make_grid, sync=sync, img_path=img_path, transform=transform)
+    viz = Visualization(filename, size)
+    if mode == "pygame":
+        # Start a pygame window
+        screen = pygame.display.set_mode((size, size))
+        viz.render(screen)
+    elif mode == "video":
+        viz.create_video(video_async=video_async)
+    else:
+        print("Invalid mode.")
+        exit()
 
     processing_time_seconds = time.time() - start_time
     processing_time_seconds = round(processing_time_seconds, 2)  # Round to 2 decimal places
