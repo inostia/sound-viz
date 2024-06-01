@@ -64,6 +64,13 @@ if __name__ == "__main__":
         default="thread",
     )
 
+    parser.add_argument(
+        "--graph",
+        type=str,
+        help="The graph to render",
+        default="src.graphs.bubbles.Bubbles",
+    )
+
     args = parser.parse_args()
     filename = args.filename
     mode = args.mode
@@ -73,6 +80,7 @@ if __name__ == "__main__":
     clear_cache = args.clear_cache == "yes"
     bpm = args.bpm
     fps = args.fps
+    graph = args.graph
 
     # Check if the file exists
     if not os.path.exists(filename):
@@ -80,7 +88,20 @@ if __name__ == "__main__":
         exit()
 
     start_time = time.time()
-    viz = Visualization(filename, size, use_cache, clear_cache, bpm, fps)
+    # Load up the graph from the module string
+    graph_module, graph_class = graph.rsplit(".", 1)
+    graph_module = __import__(graph_module, fromlist=[graph_class])
+    graph_class = getattr(graph_module, graph_class)
+
+    viz = Visualization(
+        filename=filename,
+        size=size,
+        use_cache=use_cache,
+        clear_cache=clear_cache,
+        bpm=bpm,
+        fps=fps,
+        graph_class=graph_class,
+    )
     if mode == "video":
         viz_video, viz_output = viz.create_video(async_mode=async_mode)
         print(f"Output video saved to: {viz_output}")

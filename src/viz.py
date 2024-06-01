@@ -6,11 +6,10 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_compl
 import cv2
 import numpy as np
 import pygame
-from matplotlib import pyplot as plt
-from scipy.ndimage import gaussian_filter
 
 from src.audio import Audio
 from src.cache import VizCache
+from src.graphs.base import BaseGraph
 
 """This is ported from the following p5.js code:
 
@@ -150,6 +149,7 @@ class Visualization:
     use_cache: bool
     cache: VizCache
     fps: float
+    graph: BaseGraph
 
     def __init__(
         self,
@@ -159,6 +159,7 @@ class Visualization:
         clear_cache: bool = False,
         bpm: float = None,
         fps: int = 30,
+        graph_class: BaseGraph = None,
     ):
         self.size = size
         self.fps = fps
@@ -167,288 +168,30 @@ class Visualization:
         self.cache = VizCache(filename, len(self.audio.times))
         if clear_cache:
             self.cache.clear_cache()
-        self.cache.init_grid_cache()
+        self.cache.init_graph_cache()
         self.cache.init_img_cache()
+        self.graph = graph_class(self) if issubclass(graph_class, BaseGraph) else None
 
     def set_img_dir(self):
         """Set the image directory"""
         self.img_dir = f"images/{time.strftime('%Y-%m-%d_%H-%M-%S', time.gmtime())}/"
         os.makedirs(self.img_dir)
 
-    # def draw_circle(self, grid, x_center, y_center, radius, color, blur=False):
-    def draw_circle(
-        self,
-        grid: np.ndarray,
-        x_center: int,
-        y_center: int,
-        radius: int,
-        color: np.ndarray,
-        blur: bool = False,
-        blur_radius: int = 3,
-    ):
-        """Use the midpoint circle algorithm to draw a filled circle on the grid. Apply a blur effect if needed."""
-        temp_grid = np.zeros_like(grid)
-        x = radius
-        y = 0
-        err = 0
-
-        while x >= y:
-            for i in range(int(x_center - x), int(x_center + x)):
-                temp_grid[int(y_center + y), i, :] = color
-                temp_grid[int(y_center - y), i, :] = color
-
-            for i in range(int(x_center - y), int(x_center + y)):
-                temp_grid[int(y_center + x), i, :] = color
-                temp_grid[int(y_center - x), i, :] = color
-
-            if err <= 0:
-                y += 1
-                err += 2 * y + 1
-            if err > 0:
-                x -= 1
-                err -= 2 * x + 1
-
-        if blur:
-            for channel in range(temp_grid.shape[2]):
-                if channel < 3:  # Don't blur the alpha channel
-                    temp_grid[:, :, channel] = gaussian_filter(
-                        temp_grid[:, :, channel], blur_radius
-                    )
-
-        np.add(grid, temp_grid, out=grid, casting="unsafe")
-
-    def beat_shake(
-        self, x_center: int, y_center: int, beat: float, amount: int = 0
-    ) -> tuple[int, int]:
-        """Shake the x and y coords by a small amount"""
-        # Create a random number generator with a seed based on the current beat
-        beat_rng = np.random.default_rng(seed=int(beat))
-
-        # Get the fractional part of current_beat
-        current_beat_frac = beat - int(beat)
-
-        # Make the scale factor start slow and then accelerate by taking the square root of the fractional part of current_beat
-        scale_factor = np.sqrt(current_beat_frac)
-
-        # Generate a random shake angle for each frame within a beat
-        shake_angle = beat_rng.uniform(0, 2 * np.pi)
-
-        # Calculate the x and y shift based on the shake angle and scale factor
-        x_shift = scale_factor * amount * np.cos(shake_angle)
-        y_shift = scale_factor * amount * np.sin(shake_angle)
-
-        # Update the center of the circle
-        x_center += int(x_shift)
-        y_center += int(y_shift)
-
-        return x_center, y_center
-
-    def flash_grid(
-        self, grid: np.ndarray, intensity: int, time_position: int, color: list[int]
-    ):
-        # WIP
-        pass
-
-    def darken_color(self, color: np.ndarray, gamma: float = 0.8) -> np.ndarray:
-        """Apply gamma correction to darken the color"""
-        return 255 * (color / 255) ** gamma
-
-    def draw(self, time_position: int, screen: pygame.Surface = None) -> str | None:
-        """Draw the grid for a given time frame."""
-
-        palletes = [
-            ([200, 0, 0, 255], [0, 0, 255, 255]),  # Red and Blue
-            ([0, 255, 0, 255], [255, 255, 0, 255]),  # Greeen and yellow
-            ([255, 0, 255, 255], [0, 255, 255, 255]),  # Pink and Cyan
-        ]
-
-        # Cycle color palletes and positions based on the current beat
-        t = time_position / self.fps
-        current_beat = self.audio.bpm * t / 60
-        # current_beat_section = current_beat // 96
-        current_beat_section = current_beat // 48
-        pallete_index = int(current_beat_section % len(palletes))
-        pallete = palletes[pallete_index]
-
-        # Get the energy of the audio at the given time position between 20 and 200 Hz
-        bass_amp = self.audio.get_energy(time_position, 20, 200)
-        bass_amp = np.interp(bass_amp, [0, 1], [0, 255])
-
-        # min_r = 150
-        min_r = 120
-        max_r = 350
-
-        if self.use_cache and (
-            (grid := self.cache.get_grid_cache_item(time_position)) is not None
-        ):
-            pass
-        else:
-            grid = np.zeros((self.size, self.size, 4), dtype=np.uint8)
-
-            # Scale the angle_step based on the pallete index between 1 and .25 descending
-            angle_step = np.interp(pallete_index, [0, len(palletes) - 1], [1, 0.25])
-
-            wave = self.audio.get_spectrogram_slice(time_position)
-            # Scale the wave to the range [-1, 1]
-            wave = np.interp(wave, (wave.min(), wave.max()), (-1, 1))
-            for t in [-1, 1]:
-                # for time_position in range(0, 180, 1):
-                for angle_position in np.arange(0, 180, angle_step):
-                    index = int(np.interp(angle_position, [0, 180], [0, len(wave) - 1]))
-                    r = np.interp(wave[index], [-1, 1], [min_r, max_r])
-                    x = r * np.sin(angle_position) * t
-                    y = r * np.cos(angle_position)
-
-                    # x and y can be negative, so we need to add the size to them to make them positive
-                    x += self.size / 2
-                    y += self.size / 2
-
-                    # Draw the vertex if r is greater than min_r
-                    if r > min_r:
-                        """Sine function ranges from -1 to 1, so we scale it to range. This has the effect of increasing
-                        the size of the circles as they move towards the center but then decrease as they move away from
-                        the center, like a wave."""
-                        min_px, max_px = 3, 9  # Minimum and maximum pixel sizes
-                        scaled_r = ((r - min_r) / (max_r - min_r)) * np.pi
-                        scaled_r = np.sin(scaled_r) * (max_px - min_px) + min_px
-                        scaled_r = np.clip(int(scaled_r), min_px, max_px)
-
-                        # Scale the color by angle_position
-                        circle_color = np.array(pallete[0]) * (
-                            1 - angle_position / 180
-                        ) + np.array(pallete[1]) * (angle_position / 180)
-                        # Scale by the bass amplitude
-                        circle_color_scale_factor = np.interp(
-                            bass_amp, [0, 255], [150, 255]
-                        )
-                        circle_color = (
-                            circle_color * circle_color_scale_factor / 255
-                        ).astype(np.uint8)
-
-                        # Draw a circle of radius increased_size at (x, y) with color scaled_color
-                        self.draw_circle(
-                            grid,
-                            int(x),
-                            int(y),
-                            scaled_r,
-                            circle_color,
-                            blur=True,
-                            blur_radius=scaled_r / 3,
-                        )
-
-            # Cache the grid
-            self.cache.save_grid_cache_item(time_position, grid)
-
-        # The value from the get_energy will be between 0 and 1.
-        # We need to scale it up to a higher range before converting it to the 255 range
-        # because naturally the energy is very low.
-        min_mid_freq = 1000
-        max_mid_freq = 6000
-        mid_freq_energy = self.audio.get_energy(
-            time_position, min_mid_freq, max_mid_freq, freq_scale_factor=0.3
-        )
-        mid_freq_scale_factor = 75
-        mid_freq_energy = np.clip(mid_freq_energy * mid_freq_scale_factor, 0, 1)
-        mid_freq_energy = np.interp(mid_freq_energy, [0, 1], [0, 255])
-
-        # use the pallete color with the mid_freq_energy to create a fill color
-        fill_color = np.clip(
-            np.array(pallete[0]) * (1 - mid_freq_energy / 255)
-            + np.array(pallete[1]) * (mid_freq_energy / 255),
-            0,
-            255,
-        )
-        # Apply gamma correction to darken high color values
-        fill_color = self.darken_color(fill_color, 0.7)
-        # Reduce the transparency of the fill color by a factor of 1.5 times the bass amplitude
-        fill_color[3] = bass_amp * 1.5
-        # Scale the radius of the circle based on the high frequency energy
-        circle_r_margin = 10
-        circle_r_pad = 60
-        circle_r = min_r + (mid_freq_energy / 255 - 1) * circle_r_pad
-        circle_r = np.clip(circle_r, None, min_r)
-        x_center = self.size // 2
-        y_center = self.size // 2
-
-        # "Shake" the center circle in if the bass amplitude is greater than 230
-        # if bass_amp > 230:
-        #    amount = np.interp(bass_amp, [231, 255], [0, 10])
-        #    x_center, y_center = self.beat_shake(x_center, y_center, current_beat, amount)
-
-        # Large center circle
-        blur_radius = np.clip(circle_r / 3, 0, 10)
-        self.draw_circle(
-            grid,
-            x_center,
-            y_center,
-            circle_r - circle_r_margin - blur_radius,
-            fill_color,
-            blur=True,
-            blur_radius=blur_radius,
-        )
-
-        """TODO: Flash the screen with a white color if the high frequency energy is greater than 200
-        use left and right channels to create a stereo effect?
-        high_freq_energy = self.audio.get_energy(time_position, 15000, 22050)
-        high_freq_energy = np.clip(high_freq_energy * 1000, 0, 1)  # Scale up
-        high_freq_energy = np.interp(high_freq_energy, [0, 1], [0, 255])
-        self.flash_grid(grid, intensity, time_position, [255, 255, 255, 255])"""
-
-        """TODO: Draw flashing lines between the vertices with greyscale colors based on the high frequency energy
-        TODO: Add recursive alternating colors to the center of the circle at 2/3 the radius
-        TODO: Finish drawing the flashing lines connecting the vertices
-        TODO: If in a certain beat sequence, rotate continuously
-        TODO: Move the remainder to a post-processing function"""
-
+    def process_frame(self, time_position: int, screen: pygame.Surface = None) -> str:
+        """Process a single frame of the visualization."""
+        graph = self.graph.draw(time_position)
         # If a screen is provided, render the frame to the screen
         # Otherwise, save the frame to a file
         if screen is not None:
-            self.render_frame(screen, grid)
+            self.render_frame(screen, graph)
         else:
-            return self.save_frame(time_position, grid)
+            return self.save_frame(time_position, graph)
 
-    def save_frame(self, time_position: int, grid: np.ndarray) -> str:
-        """Save the grid to a file"""
+    def save_frame(self, time_position: int, graph: np.ndarray) -> str:
+        """Save the graph to a file"""
         image_filename = f"{self.cache.img_cache_dir}{time_position}.png"
-        cv2.imwrite(image_filename, grid)
+        cv2.imwrite(image_filename, graph)
         return image_filename
-
-    def render_frame(self, screen: pygame.Surface, grid: np.ndarray):
-        """Render a single frame"""
-        # Convert the grid to a pygame surface
-        surface = pygame.surfarray.make_surface(grid)
-        surface = pygame.transform.scale(surface, (self.size, self.size))
-        screen.blit(surface, (0, 0))
-        pygame.display.flip()
-
-    def render(self, screen: pygame.Surface):
-        t = pygame.time.get_ticks()
-        getTicksLastFrame = t
-        # pygame.mixer.music.load(self.audio.filename)
-        # pygame.mixer.music.play(0)
-
-        # Run until the user asks to quit
-        running = True
-        while running:
-            # Did the user click the window close button?
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
-
-            # Draw the grid
-            self.draw(
-                int(pygame.time.get_ticks() / 1000 * self.audio.time_index_ratio),
-                screen,
-            )
-
-            # Cap the frame rate
-            t = pygame.time.get_ticks()
-            while t - getTicksLastFrame < 1000 / self.fps:
-                t = pygame.time.get_ticks()
-            getTicksLastFrame = t
-
-        # Done! Time to quit.
-        pygame.quit()
 
     def process_time_frames(self, async_mode: str, func: callable, *args, **kwargs):
         """Iterate over each time frame and pass the spectrogram slice to the given function"""
@@ -463,7 +206,7 @@ class Visualization:
             ) as thread_executor:
                 if self.use_cache:
                     # Assume the cache files are in order
-                    num_cache_files = len(self.cache.grid_cache_files)
+                    num_cache_files = len(self.cache.graph_cache_files)
                     thread_futures = {
                         thread_executor.submit(func, i, *args, **kwargs): i
                         for i in range(num_cache_files)
@@ -503,7 +246,7 @@ class Visualization:
     def create_video(self, async_mode: str = "off"):
         """Create a video from the images generated for each time frame and add the original audio."""
         # Gen_file and save an image for each time frame
-        image_files = self.process_time_frames(async_mode, self.draw)
+        image_files = self.process_time_frames(async_mode, self.process_frame)
 
         # Get the size of and name image
         img = cv2.imread(image_files[0])
@@ -547,3 +290,40 @@ class Visualization:
         ]
         subprocess.run(command, check=True)
         return video_filename, output_filename
+
+    def render_frame(self, screen: pygame.Surface, graph: np.ndarray):
+        """Render a single frame"""
+        # Convert the graph to a pygame surface
+        surface = pygame.surfarray.make_surface(graph)
+        surface = pygame.transform.scale(surface, (self.size, self.size))
+        screen.blit(surface, (0, 0))
+        pygame.display.flip()
+
+    def render(self, screen: pygame.Surface):
+        t = pygame.time.get_ticks()
+        getTicksLastFrame = t
+        # pygame.mixer.music.load(self.audio.filename)
+        # pygame.mixer.music.play(0)
+
+        # Run until the user asks to quit
+        running = True
+        while running:
+            # Did the user click the window close button?
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+
+            # Draw the graph
+            self.process_frame(
+                int(pygame.time.get_ticks() / 1000 * self.audio.time_index_ratio),
+                screen,
+            )
+
+            # Cap the frame rate
+            t = pygame.time.get_ticks()
+            while t - getTicksLastFrame < 1000 / self.fps:
+                t = pygame.time.get_ticks()
+            getTicksLastFrame = t
+
+        # Done! Time to quit.
+        pygame.quit()
