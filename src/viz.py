@@ -175,6 +175,7 @@ class Visualization:
         self.img_dir = f"images/{time.strftime('%Y-%m-%d_%H-%M-%S', time.gmtime())}/"
         os.makedirs(self.img_dir)
 
+    # def draw_circle(self, grid, x_center, y_center, radius, color, blur=False):
     def draw_circle(
         self,
         grid: np.ndarray,
@@ -183,6 +184,7 @@ class Visualization:
         radius: int,
         color: np.ndarray,
         blur: bool = False,
+        blur_radius: int = 3,
     ):
         """Use the midpoint circle algorithm to draw a filled circle on the grid. Apply a blur effect if needed."""
         temp_grid = np.zeros_like(grid)
@@ -210,7 +212,7 @@ class Visualization:
             for channel in range(temp_grid.shape[2]):
                 if channel < 3:  # Don't blur the alpha channel
                     temp_grid[:, :, channel] = gaussian_filter(
-                        temp_grid[:, :, channel], sigma=radius / 3
+                        temp_grid[:, :, channel], blur_radius
                     )
 
         np.add(grid, temp_grid, out=grid, casting="unsafe")
@@ -247,6 +249,10 @@ class Visualization:
         # WIP
         pass
 
+    def darken_color(self, color: np.ndarray, gamma: float = 0.8) -> np.ndarray:
+        """Apply gamma correction to darken the color"""
+        return 255 * (color / 255) ** gamma
+
     def draw(self, time_position: int, screen: pygame.Surface = None) -> str | None:
         """Draw the grid for a given time frame."""
 
@@ -279,8 +285,6 @@ class Visualization:
         else:
             grid = np.zeros((self.size, self.size, 4), dtype=np.uint8)
 
-            # Scale the color to bass amplitude from 0 to 255
-            alpha = np.interp(bass_amp, [0, 255], [150, 255])
             # Scale the angle_step based on the pallete index between 1 and .25 descending
             angle_step = np.interp(pallete_index, [0, len(palletes) - 1], [1, 0.25])
 
@@ -301,30 +305,35 @@ class Visualization:
 
                     # Draw the vertex if r is greater than min_r
                     if r > min_r:
-                        # Original color (white)
-                        # color = np.array([255, 255, 255])
-                        # Scale the color between red and blue based on the angle_position
-                        # color = np.array([255, 0, 0]) * (1 - angle_position / 180) + np.array([0, 0, 255]) * (angle_position / 180)
-                        color = np.array(pallete[0]) * (
+                        """Sine function ranges from -1 to 1, so we scale it to range. This has the effect of increasing
+                        the size of the circles as they move towards the center but then decrease as they move away from
+                        the center, like a wave."""
+                        min_px, max_px = 3, 9  # Minimum and maximum pixel sizes
+                        scaled_r = ((r - min_r) / (max_r - min_r)) * np.pi
+                        scaled_r = np.sin(scaled_r) * (max_px - min_px) + min_px
+                        scaled_r = np.clip(int(scaled_r), min_px, max_px)
+
+                        # Scale the color by angle_position
+                        circle_color = np.array(pallete[0]) * (
                             1 - angle_position / 180
                         ) + np.array(pallete[1]) * (angle_position / 180)
-
-                        # Scale the color by alpha
-                        scaled_color = (color * alpha / 255).astype(np.uint8)
-                        # Scale the individual pixel size by a factor of r
-                        scaled_r = ((r - min_r) / (max_r - min_r)) * np.pi
-                        # Limit the size
-                        min_px = 3
-                        max_px = 9
-                        # Sine function ranges from -1 to 1, so we scale it to range
-                        # This has the effect of increasing the size of the circles as they move towards the center
-                        # but then decrease as they move away from the center, like a wave
-                        increased_size = np.sin(scaled_r) * (max_px - min_px) + min_px
-                        increased_size = np.clip(int(increased_size), min_px, max_px)
+                        # Scale by the bass amplitude
+                        circle_color_scale_factor = np.interp(
+                            bass_amp, [0, 255], [150, 255]
+                        )
+                        circle_color = (
+                            circle_color * circle_color_scale_factor / 255
+                        ).astype(np.uint8)
 
                         # Draw a circle of radius increased_size at (x, y) with color scaled_color
                         self.draw_circle(
-                            grid, int(x), int(y), increased_size, scaled_color, True
+                            grid,
+                            int(x),
+                            int(y),
+                            scaled_r,
+                            circle_color,
+                            blur=True,
+                            blur_radius=scaled_r / 3,
                         )
 
             # Cache the grid
@@ -336,7 +345,7 @@ class Visualization:
         min_mid_freq = 1000
         max_mid_freq = 6000
         mid_freq_energy = self.audio.get_energy(
-            time_position, min_mid_freq, max_mid_freq, freq_scale_factor=0.2
+            time_position, min_mid_freq, max_mid_freq, freq_scale_factor=0.3
         )
         mid_freq_scale_factor = 75
         mid_freq_energy = np.clip(mid_freq_energy * mid_freq_scale_factor, 0, 1)
@@ -344,15 +353,18 @@ class Visualization:
 
         # use the pallete color with the mid_freq_energy to create a fill color
         fill_color = np.clip(
-            np.array(pallete[1]) * (1 - mid_freq_energy / 255)
-            + np.array(pallete[0]) * (mid_freq_energy / 255),
+            np.array(pallete[0]) * (1 - mid_freq_energy / 255)
+            + np.array(pallete[1]) * (mid_freq_energy / 255),
             0,
             255,
         )
+        # Apply gamma correction to darken high color values
+        fill_color = self.darken_color(fill_color, 0.7)
         # Reduce the transparency of the fill color by a factor of 1.5 times the bass amplitude
         fill_color[3] = bass_amp * 1.5
         # Scale the radius of the circle based on the high frequency energy
-        circle_r_margin, circle_r_pad = (10, 60)
+        circle_r_margin = 10
+        circle_r_pad = 60
         circle_r = min_r + (mid_freq_energy / 255 - 1) * circle_r_pad
         circle_r = np.clip(circle_r, None, min_r)
         x_center = self.size // 2
@@ -364,8 +376,15 @@ class Visualization:
         #    x_center, y_center = self.beat_shake(x_center, y_center, current_beat, amount)
 
         # Large center circle
+        blur_radius = np.clip(circle_r / 3, 0, 10)
         self.draw_circle(
-            grid, x_center, y_center, circle_r - circle_r_margin, fill_color, True
+            grid,
+            x_center,
+            y_center,
+            circle_r - circle_r_margin - blur_radius,
+            fill_color,
+            blur=True,
+            blur_radius=blur_radius,
         )
 
         """TODO: Flash the screen with a white color if the high frequency energy is greater than 200
