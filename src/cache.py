@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 
-CACHE_DIR = "cache/"
+CACHE_DIR = ".cache/"
 GRAPH_CACHE_KEY = "graph"
 IMAGE_CACHE_KEY = "image"
 
