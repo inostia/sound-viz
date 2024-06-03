@@ -35,13 +35,14 @@ class Bubbles(BaseGraph):
 
 
         PALETTES = {
-            ((255, 0, 0, 255), (0, 0, 255, 255)): 6,  # Red and Blue
+            ((255, 0, 0, 255), (0, 0, 255, 255)): 12,  # Red and Blue
             ((0, 255, 0, 255), (255, 255, 0, 255)): 6,  # Green and Yellow
-            ((255, 0, 255, 255), (0, 255, 255, 255)): 18,  # Pink and Cyan
-            ((0, 255, 255, 255), (255, 165, 0, 255)): 6,  # Neon Blue and Neon Orange
-            ((255, 20, 147, 255), (57, 255, 20, 255)): 12,  # Neon Pink and Neon Green
+            ((255, 0, 255, 255), (0, 255, 255, 255)): 30,  # Magenta and Cyan
+            ((0, 255, 255, 255), (255, 165, 0, 255)): 24,  # Cyan and Orange
+            ((255, 20, 147, 255), (57, 255, 20, 255)): 12,  # Deep Pink and Bright Green
+            ((255, 255, 0, 255), (255, 0, 255, 255)): 12,  # Yellow and Magenta
         }
-        ANGLE_STEPS = [0.25, 0.625, 0.5]  # Repetitions of the wave pattern in each half of the circle
+        ANGLE_STEPS = [0.25, 0.625, 0.333]  # Repetitions of the wave pattern in each half of the circle
 
         # Cycle color palettes and positions based on the current beat
         t = time_position / fps
