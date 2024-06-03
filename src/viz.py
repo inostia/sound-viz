@@ -247,7 +247,7 @@ class Visualization:
                 for future in as_completed(process_futures):
                     i = process_futures[future]
                     collection[i], took[i] = future.result()
-                    print(f"Processed frame {i+1}/{n} in {took[i]:.2f} seconds")
+                    print(f"Processed frame {i+1}/{n} in {took[i]:.2f} seconds (estimated time remaining: {(n-i-1)*sum(took)/len(took):.2f} seconds")
         else:
             if not self.use_cache or n - num_graph_cache_files > 0:
                 print(
