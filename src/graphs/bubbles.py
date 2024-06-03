@@ -26,12 +26,17 @@ class Bubbles(BaseGraph):
         high_freq_energy = np.clip(high_freq_energy * 1000, 0, 1)  # Scale up
         high_freq_energy = np.interp(high_freq_energy, [0, 1], [0, 255])
         self.flash_graph(graph, intensity, time_position, [255, 255, 255, 255])"""
+        
+        # Sooner:
+        # TODO: Take the time signature as an argument and perform calculations based on that
+        # TODO: Scale radius of the outer circles based on the small circle size
+        # TODO: Split the circle into 3(?) sections: 0-60, 60-120, 120-180
+        # TODO: IF IN A CERTAIN BEAT SEQUENCE (24 BEATS), ROTATE CONTINUOUSLY
+
+        # Later:
         # TODO: Draw flashing lines between the vertices with greyscale colors based on the high frequency energy
         # TODO: Add recursive alternating colors to the center of the circle at 2/3 the radius
         # TODO: Finish drawing the flashing lines connecting the vertices
-        # TODO: Split the circle into 3(?) sections: 0-60, 60-120, 120-180
-        # TODO: IF IN A CERTAIN BEAT SEQUENCE (24 BEATS), ROTATE CONTINUOUSLY
-        # TODO: Take the time signature as an argument and perform calculations based on that
 
 
         PALETTES = {

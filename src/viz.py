@@ -149,6 +149,7 @@ class Visualization:
     size: int
     graph_class: Type[BaseGraph]
     bpm: int
+    time_signature: str = "4/4"
     fps: float
     use_cache: bool
     clear_cache: str
@@ -159,6 +160,7 @@ class Visualization:
         size: int,
         graph_class: Type[BaseGraph],
         bpm: float = None,
+        time_signature: str = "4/4",
         fps: int = 30,
         use_cache: bool = True,
         clear_cache: str = "no",
@@ -169,6 +171,7 @@ class Visualization:
             raise ValueError("graph_class must be a subclass of BaseGraph")
         self.graph_class = graph_class
         self.bpm = bpm
+        self.time_signature = time_signature
         self.fps = fps
         self.use_cache = use_cache
         self.clear_cache = clear_cache
@@ -176,7 +179,7 @@ class Visualization:
     def process_frame(self, time_position: int, screen: pygame.Surface = None) -> str:
         """Process a single frame of the visualization."""
         start_time = time.time()
-        audio = Audio(self.filename, self.bpm, self.fps)
+        audio = Audio(self.filename, self.bpm, self.time_signature, self.fps)
         cache = VizCache(self.filename, len(audio.times))
         graph = self.graph_class().draw(
             time_position, audio, cache, self.size, self.fps, self.use_cache
@@ -205,7 +208,7 @@ class Visualization:
         **kwargs,
     ):
         """Iterate over each time frame and pass the spectrogram slice to the given function"""
-        audio = Audio(self.filename, self.bpm, self.fps)
+        audio = Audio(self.filename, self.bpm, self.time_signature, self.fps)
         n = len(audio.times)
         cache = VizCache(self.filename, n)
         if self.clear_cache == "all":

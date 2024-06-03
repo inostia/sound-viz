@@ -34,6 +34,13 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--time-signature",
+        type=str,
+        help="The time signature of the audio file",
+        default="4/4",
+    )
+
+    parser.add_argument(
         "--fps",
         type=int,
         help="The FPS of the output video",
@@ -100,6 +107,7 @@ if __name__ == "__main__":
         fps=args.fps,
         use_cache=args.cache == "on",
         clear_cache=args.clear_cache,
+        time_signature=args.time_signature,
     )
     if args.mode == "video":
         viz_video, viz_output, avg_took = viz.create_video(args.async_mode, args.async_workers)

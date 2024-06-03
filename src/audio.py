@@ -1,8 +1,3 @@
-import json
-import os
-import subprocess
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
-
 import librosa
 import numpy as np
 import scipy.ndimage.filters
@@ -21,10 +16,11 @@ class Audio:
     times: np.ndarray = np.array([])
     time_index_ratio: float = 0.0
     frequencies_index_ratio: float = 0.0
-    bpm: float|None = None
+    bpm: float | None = None
+    time_signature: str = "4/4"
     total_beats: int = 0
 
-    def __init__(self, filename, bpm=None, fps=30):
+    def __init__(self, filename, bpm=None, time_signature="4/4", fps=30):
         self.filename = filename
         self.time_series, self.sample_rate = librosa.load(filename)
         self.hop_length = int(self.sample_rate / fps)
@@ -50,6 +46,7 @@ class Audio:
             self.bpm = bpm
         else:
             self.bpm = self.detect_bpm()
+        self.time_signature = time_signature
 
     def display_spectrogram(self):
         """Display the spectrogram"""
