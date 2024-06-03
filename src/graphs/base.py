@@ -1,22 +1,15 @@
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
 
+import cv2
 import numpy as np
 from scipy.ndimage import gaussian_filter
-
-if TYPE_CHECKING:
-    from src.viz import Visualization
 
 
 class BaseGraph(ABC):
     """Base class for all graph types."""
-    viz: 'Visualization'
-
-    def __init__(self, viz: 'Visualization'):
-        self.viz = viz
 
     @abstractmethod
-    def draw(self, time_position: int) -> np.ndarray:
+    def draw(self, time_position: int, *args, **kwargs) -> np.ndarray:
         """Draw the graph for a given time frame."""
         pass
 
@@ -93,6 +86,73 @@ class BaseGraph(ABC):
         # WIP
         pass
 
-    def darken_color(self, color: np.ndarray, gamma: float = 0.8) -> np.ndarray:
-        """Apply gamma correction to darken the color"""
-        return 255 * (color / 255) ** gamma
+    def rotate_graph(self, graph: np.ndarray, angle: float) -> np.ndarray:
+        """Rotate the graph in place by a given angle"""
+        # Get the center of the graph
+        center = (graph.shape[1] // 2, graph.shape[0] // 2)
+        # Get the rotation matrix
+        rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+        # Rotate the graph
+        return cv2.warpAffine(graph, rotation_matrix, (graph.shape[1], graph.shape[0]))
+
+    def adjust_brightness(self, color: np.ndarray, gamma: float = 1.0) -> np.ndarray:
+        """Apply gamma correction to adjust the brightness of the color"""
+        # Separate the color into RGB and alpha components
+        rgb, alpha = color[:3], color[3:]
+
+        # Apply gamma correction to the RGB components
+        adjusted_rgb = 255 * (rgb / 255) ** gamma
+
+        # Combine the adjusted RGB components with the alpha component
+        return np.concatenate([adjusted_rgb, alpha])
+    
+    def adjust_transparency(self, color: np.ndarray, alpha_factor: float = 1.0) -> np.ndarray:
+        """Adjust the transparency of the color by a given factor"""
+        # Separate the color into RGB and alpha components
+        rgb, old_alpha = color[:3], color[3:]
+
+        # Calculate the new alpha value
+        new_alpha = old_alpha * alpha_factor
+
+        # Combine the RGB components with the new alpha value
+        return np.concatenate([rgb, [new_alpha]])
+    
+    def set_transparency(self, color: np.ndarray, alpha: float = 1.0) -> np.ndarray:
+        """Set the transparency of the color to a given value"""
+        # Separate the color into RGB and alpha components
+        rgb = color[:3]
+
+        # Combine the RGB components with the new alpha value
+        return np.concatenate([rgb, [alpha]])
+
+    def rgb_to_lab(self, rgb_color):
+        """Convert an RGB color to Lab color space."""
+        rgb_color = np.array(rgb_color, dtype=np.float32) / 255
+        lab_color = cv2.cvtColor(np.array([[rgb_color]]), cv2.COLOR_RGB2Lab)
+        return lab_color[0][0]
+
+    def lab_to_rgb(self, lab_color):
+        """Convert a Lab color to RGB color space."""
+        rgb_color = cv2.cvtColor(np.array([[lab_color]]), cv2.COLOR_Lab2RGB)
+        return (rgb_color[0][0] * 255).astype(int)
+    
+    def rgba_to_rgb(self, rgba_color):
+        """Convert an RGBA color to RGB color space."""
+        return rgba_color[:3]
+
+    def interpolate_color(self, color1, color2, weight):
+        """Interpolate between two colors in the Lab color space."""
+        # Save the alpha channel
+        alpha = color1[3:]
+
+        # Convert colors to Lab color space
+        lab_color1 = self.rgb_to_lab(self.rgba_to_rgb(color1))
+        lab_color2 = self.rgb_to_lab(self.rgba_to_rgb(color2))
+
+        # Interpolate in Lab color space
+        interpolated_color = lab_color1 * (1 - weight) + lab_color2 * weight
+
+        # Convert back to RGB color space
+        rgb_interpolated_color = self.lab_to_rgb(interpolated_color)
+
+        return np.concatenate([rgb_interpolated_color, alpha])

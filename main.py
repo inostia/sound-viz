@@ -41,19 +41,19 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--use-cache",
+        "--cache",
         type=str,
-        choices=["yes", "no"],
+        choices=["on", "off"],
         help="Whether to use the cache",
-        default="yes",
+        default="off",
     )
 
     parser.add_argument(
         "--clear-cache",
         type=str,
-        choices=["yes", "no"],
+        choices=["graph", "img", "all", "off"],
         help="Whether to clear the cache",
-        default="no",
+        default="off",
     )
 
     parser.add_argument(
@@ -65,6 +65,13 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--async-workers",
+        type=int,
+        help="The maximum number of workers to use for async mode.",
+        default=12,
+    )
+
+    parser.add_argument(
         "--graph",
         type=str,
         help="The graph to render",
@@ -72,45 +79,38 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    filename = args.filename
-    mode = args.mode
-    size = args.size
-    use_cache = args.use_cache == "yes"
-    async_mode = args.async_mode
-    clear_cache = args.clear_cache == "yes"
-    bpm = args.bpm
-    fps = args.fps
-    graph = args.graph
 
     # Check if the file exists
-    if not os.path.exists(filename):
+    if not os.path.exists(args.filename):
         print("File not found.")
         exit()
 
     start_time = time.time()
+
     # Load up the graph from the module string
-    graph_module, graph_class = graph.rsplit(".", 1)
+    graph_module, graph_class = args.graph.rsplit(".", 1)
     graph_module = __import__(graph_module, fromlist=[graph_class])
     graph_class = getattr(graph_module, graph_class)
 
     viz = Visualization(
-        filename=filename,
-        size=size,
-        use_cache=use_cache,
-        clear_cache=clear_cache,
-        bpm=bpm,
-        fps=fps,
+        filename=args.filename,
+        size=args.size,
         graph_class=graph_class,
+        bpm=args.bpm,
+        fps=args.fps,
+        use_cache=args.cache == "on",
+        clear_cache=args.clear_cache,
     )
-    if mode == "video":
-        viz_video, viz_output = viz.create_video(async_mode=async_mode)
+    if args.mode == "video":
+        viz_video, viz_output, avg_took = viz.create_video(args.async_mode, args.async_workers)
         print(f"Output video saved to: {viz_output}")
+        print(f"Average processing time per frame: {avg_took:.2f} seconds")
         subprocess.run(
             f"open {viz_output}", shell=True
         )
-    elif mode == "pygame":
+    elif args.mode == "pygame":
         # Start a pygame window
-        screen = pygame.display.set_mode((size, size))
+        screen = pygame.display.set_mode((args.size, args.size))
         viz.render(screen)
     else:
         print("Invalid mode.")
@@ -118,4 +118,4 @@ if __name__ == "__main__":
 
     processing_time_seconds = time.time() - start_time
     processing_time_minutes = round(processing_time_seconds / 60, 2)
-    print(f"Processing time frames took {processing_time_minutes} minutes.")
+    print(f"Processing time took {processing_time_minutes} minutes.")
