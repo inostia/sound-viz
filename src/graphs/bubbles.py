@@ -8,6 +8,17 @@ from .base import BaseGraph
 
 class Bubbles(BaseGraph):
     """A graph that draws circles in a wave pattern and pulses a center circle based on the frequency amplitudes."""
+    PALETTES = [
+        (((255, 0, 0, 255), (0, 0, 255, 255)), 1),  # Red and Blue
+        (((0, 255, 0, 255), (255, 255, 0, 255)), .5),  # Green and Yellow
+        (((255, 0, 255, 255), (0, 255, 255, 255)), 2.5),  # Magenta and Cyan
+        (((0, 255, 255, 255), (255, 165, 0, 255)), 2),  # Cyan and Orange
+        (((255, 20, 147, 255), (57, 255, 20, 255)), 1),  # Deep Pink and Bright Green
+        (((255, 255, 0, 255), (255, 0, 255, 255)), 1),  # Yellow and Magenta
+    ]
+    ANGLE_STEPS: list = [0.25, 0.625, 0.333]  # Repetitions of the wave pattern in each half of the circle
+    ROTATE_CHANCE: float = 0.33  # Chance to rotate the graph
+
 
     def draw(
         self,
@@ -28,46 +39,54 @@ class Bubbles(BaseGraph):
         self.flash_graph(graph, intensity, time_position, [255, 255, 255, 255])"""
         
         # Sooner:
-        # TODO: Take the time signature as an argument and perform calculations based on that
         # TODO: Scale radius of the outer circles based on the small circle size
         # TODO: Split the circle into 3(?) sections: 0-60, 60-120, 120-180
-        # TODO: IF IN A CERTAIN BEAT SEQUENCE (24 BEATS), ROTATE CONTINUOUSLY
 
         # Later:
         # TODO: Draw flashing lines between the vertices with greyscale colors based on the high frequency energy
         # TODO: Add recursive alternating colors to the center of the circle at 2/3 the radius
         # TODO: Finish drawing the flashing lines connecting the vertices
 
-
-        PALETTES = {
-            ((255, 0, 0, 255), (0, 0, 255, 255)): 12,  # Red and Blue
-            ((0, 255, 0, 255), (255, 255, 0, 255)): 6,  # Green and Yellow
-            ((255, 0, 255, 255), (0, 255, 255, 255)): 30,  # Magenta and Cyan
-            ((0, 255, 255, 255), (255, 165, 0, 255)): 24,  # Cyan and Orange
-            ((255, 20, 147, 255), (57, 255, 20, 255)): 12,  # Deep Pink and Bright Green
-            ((255, 255, 0, 255), (255, 0, 255, 255)): 12,  # Yellow and Magenta
-        }
-        ANGLE_STEPS = [0.25, 0.625, 0.333]  # Repetitions of the wave pattern in each half of the circle
-
         # Cycle color palettes and positions based on the current beat
-        t = time_position / fps
-        current_beat = audio.bpm * t / 60
+        current_beat = audio.get_beat(time_position, fps)
 
-        palette, palette_i, total_duration = None, 0, 0
-        palettes_items = list(PALETTES.items())
-        total_beats = sum(duration for _, duration in palettes_items)
+        # Parse the time signature 
+        beats, unit = audio.parse_time_signature()
 
-        # Calculate the effective current beat by taking modulus with total beats
-        # This will make the current beat cycle back to 0 after it exceeds total beats
-        effective_current_beat = current_beat % total_beats
+        if not self.PALETTES:
+            raise ValueError("No palettes defined for the graph")
 
-        # Find the current palette
-        for i, (p, duration) in enumerate(palettes_items):
-            total_duration += duration
-            if effective_current_beat < total_duration:
-                palette = p
-                palette_i = i
+        # APPROACH 1
+        total_beats = 0
+        palette_id = 0
+        palette = None
+
+        while total_beats <= current_beat:
+            palette, measures = self.PALETTES[palette_id % len(self.PALETTES)]
+            total_beats += measures * beats
+            if total_beats > current_beat:
                 break
+            palette_id += 1
+
+        if palette is None:
+            raise ValueError("Could not find a palette for the current beat")
+
+        # APPROACH 2
+        # palette, palette_i, total_duration_in_measures = None, 0, 0
+        # total_duration_in_beats = sum(duration * beats for _, duration in self.PALETTES)
+
+        # # Calculate the effective current beat by taking modulus with total beats
+        # # This will make the current beat cycle back to 0 after it exceeds total beats
+        # cycled_current_beat = current_beat % total_duration_in_beats
+
+        # # Find the current palette
+        # for i, (p, duration_in_measures) in enumerate(self.PALETTES):
+        #     total_duration_in_measures += duration_in_measures
+        #     if cycled_current_beat < total_duration_in_measures * beats:
+        #         palette = p
+        #         palette_i = i
+        #         break
+        
 
         if palette is None:
             raise ValueError("Could not find a palette for the current beat")
@@ -90,7 +109,7 @@ class Bubbles(BaseGraph):
             # Scale the angle_step based on the palette index between 1 and .25 descending
             # angle_step_range = [1, 0.25]
             # angle_step = np.interp(palette_i, [0, len(palettes) - 1], angle_step_range)
-            angle_step = ANGLE_STEPS[palette_i % len(ANGLE_STEPS)]
+            angle_step = self.ANGLE_STEPS[(palette_id % len(self.PALETTES)) % len(self.ANGLE_STEPS)]
             wave = audio.get_spectrogram_slice(time_position)
             # Scale the wave to the range [-1, 1]
             wave = np.interp(wave, (wave.min(), wave.max()), (-1, 1))
@@ -141,17 +160,17 @@ class Bubbles(BaseGraph):
             cache.save_graph_cache_item(time_position, graph, memory_safe=True)
 
         # Post process the graph
-        graph = self.post_process(graph, time_position, palette, bass_amp, min_r, audio, size)
+        graph = self.post_process(graph, audio, time_position, palette_id, bass_amp, min_r, size)
         return graph
 
     def post_process(
         self,
         graph: np.ndarray,
+        audio: Audio,
         time_position: int,
-        palette: list[list[int]],
+        palette_id: int,
         bass_amp: int,
         min_r: int,
-        audio: Audio,
         size: int = 720,
     ) -> np.ndarray:
         """Post process the graph for a given time frame."""
@@ -182,6 +201,7 @@ class Bubbles(BaseGraph):
         #     0,
         #     255,
         # )
+        palette = self.PALETTES[palette_id % len(self.PALETTES)][0]
         fill_color = self.interpolate_color(palette[0], palette[1], mid_freq_energy / 255 * 0.7)
         # Apply gamma correction to darken high color values
         # fill_color = self.adjust_brightness(fill_color, 0.7)
@@ -211,5 +231,16 @@ class Bubbles(BaseGraph):
             blur=True,
             blur_radius=blur_radius,
         )
+
+        rng = np.random.default_rng(seed=palette_id)
+        # Do we want to rotate the graph?
+        if palette_id != 0 and rng.random() < self.ROTATE_CHANCE:
+            # Aways rotate in the opposite direction as the previous rotation
+            rotate_direction = -1 if palette_id % 2 == 0 else 1
+            # rotation_rate = rng.uniform(0.5, 0.75) * rotate_direction
+            rotation_rate = rng.uniform(0.5, 1.25) * rotate_direction
+            # Calculate the rotation angle based on the time position
+            rotation_angle = rotation_rate * time_position
+            graph = self.rotate_graph(graph, rotation_angle)
 
         return graph

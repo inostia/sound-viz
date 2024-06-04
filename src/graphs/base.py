@@ -8,6 +8,7 @@ from scipy.ndimage import gaussian_filter
 class BaseGraph(ABC):
     """Base class for all graph types."""
 
+
     @abstractmethod
     def draw(self, time_position: int, *args, **kwargs) -> np.ndarray:
         """Draw the graph for a given time frame."""

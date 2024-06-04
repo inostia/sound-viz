@@ -111,3 +111,28 @@ class Audio:
         # Assume the BPM is constant throughout the audio file
         # TODO: handle the case where the BPM changes and find the BPM for each time frame
         return tempo[0]
+
+    def parse_time_signature(self):
+        """Parse the time signature"""
+        if not self.time_signature:
+            raise ValueError("Time signature is not set")
+
+        time_signature = self.time_signature.split("/")
+        if len(time_signature) != 2:
+            raise ValueError(f"Invalid time signature: {self.time_signature}")
+
+        try:
+            beats = int(time_signature[0])
+            unit = int(time_signature[1])
+        except ValueError:
+            raise ValueError(f"Time signature must be two integers separated by a slash: {self.time_signature}")
+
+        if beats <= 0 or unit not in [1, 2, 4, 8, 16, 32, 64]:
+            raise ValueError(f"Invalid time signature: {self.time_signature}")
+
+        return beats, unit
+    
+    def get_beat(self, target_time: int, fps: int) -> float:
+        """Get the beat at a given time"""
+        t = target_time / fps
+        return self.bpm * t / 60

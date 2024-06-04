@@ -13,134 +13,6 @@ from src.audio import Audio
 from src.cache import VizCache
 from src.graphs.base import BaseGraph
 
-"""This is ported from the following p5.js code:
-
-var song
-var img
-var fft
-var particles = []
-
-function preload() {
-  song = loadSound('everglow.mp3')
-  img = loadImage('bg.jpg')
-}
-
-function setup() {
-  createCanvas(windowWidth, windowHeight);
-  angleMode(DEGREES)
-  imageMode(CENTER)
-  rectMode(CENTER)
-  fft = new p5.FFT(0.3)
-
-  img.filter(BLUR, 12)
-
-  noLoop()
-}
-
-function draw() {
-  background(0)
-  
-
-  translate(width / 2, height / 2)
-
-  fft.analyze()
-  amp = fft.getEnergy(20, 200)
-
-  push()
-  if (amp > 230) {
-    rotate(random(-0.5, 0.5))
-  }
-
-  image(img, 0, 0, width + 100, height + 100)
-  pop()
-
-  var alpha = map(amp, 0, 255, 180, 150)
-  fill(0, alpha)
-  noStroke()
-  rect(0, 0, width, height)
-
-  
-  stroke(255)
-  strokeWeight(3)
-  noFill()
-
-  var wave = fft.waveform()
-
-  for (var t = -1; t <= 1; t += 2) {
-    beginShape()
-    for (var i = 0; i <= 180; i += 0.5) {
-      var index = floor(map(i, 0, 180, 0, wave.length - 1))
-  
-      var r = map(wave[index], -1, 1, 150, 350)
-      
-      var x = r * sin(i) * t
-      var y = r * cos(i)
-      vertex(x, y)
-    }
-    endShape()
-  }
-  
-  var p = new Particle()
-  particles.push(p)
-
-
-  for (var i = particles.length - 1; i >= 0; i--) {
-    if (!particles[i].edges()) {
-      particles[i].update(amp > 230)
-      particles[i].show()
-    } else {
-      particles.splice(i, 1)
-    }
-    
-  }
-  
-}
-
-function mouseClicked() {
-  if (song.isPlaying()) {
-    song.pause()
-    noLoop()
-  } else {
-    song.play()
-    loop()
-  }
-}
-
-class Particle {
-  constructor() {
-    this.pos = p5.Vector.random2D().mult(250)
-    this.vel = createVector(0, 0)
-    this.acc = this.pos.copy().mult(random(0.0001, 0.00001))
-
-    this.w = random(3, 5)
-
-    this.color = [random(200, 255), random(200, 255), random(200, 255),]
-  }
-  update(cond) {
-    this.vel.add(this.acc)
-    this.pos.add(this.vel)
-    if (cond) {
-      this.pos.add(this.vel)
-      this.pos.add(this.vel)
-      this.pos.add(this.vel)
-    }
-  }
-  edges() {
-    if (this.pos.x < -width / 2 || this.pos.x > width / 2 || this.pos.y < -height / 2 || this.pos.y > height / 2) {
-      return true
-    } else {
-      return false
-    }
-  }
-  show() {
-    noStroke()
-    fill(this.color)
-    ellipse(this.pos.x, this.pos.y, this.w)
-  }
-}:
-
-"""
-
 
 class Visualization:
     """Class for visualizing audio data."""
@@ -250,7 +122,7 @@ class Visualization:
                 for future in as_completed(process_futures):
                     i = process_futures[future]
                     collection[i], took[i] = future.result()
-                    print(f"Processed frame {i+1}/{n} in {took[i]:.2f} seconds (estimated time remaining: {(n-i-1)*sum(took)/len(took):.2f} seconds")
+                    print(f"Processed frame {i+1}/{n} in {took[i]:.2f} seconds")
         else:
             if not self.use_cache or n - num_graph_cache_files > 0:
                 print(
@@ -262,17 +134,21 @@ class Visualization:
         avg_took = sum(took) / len(took)
         return collection, avg_took
 
-    def generate_unique_filename(self, filename, hash_seed=None) -> str:
+    def generate_unique_filename(self, filename) -> str:
         """Generate a unique filename by appending a hash if the file already exists"""
         if os.path.exists(filename):
-            hash = hashlib.sha1()
-            if hash_seed is not None:
-                hash.update(str(hash_seed).encode("utf-8"))
-            else:
-                hash.update(str(time.time()).encode("utf-8"))
-            unique_hash = hash.hexdigest()[:5]
+            output_dir = os.path.dirname(filename)
+            # Use the last modified file in the directory as the seed
+            hash_seed = max(
+                [
+                    os.path.join(output_dir, f)
+                    for f in os.listdir(output_dir)
+                ],
+                key=os.path.getmtime,
+            )
+            hash = hashlib.md5(hash_seed.encode())
             basename, ext = os.path.splitext(filename)
-            filename = f"{basename}_{unique_hash}{ext}"
+            return f"{basename}_{hash.hexdigest()[:5]}{ext}"
         return filename
 
     def create_video(self, async_mode: str = "off", async_workers: int = 4) -> tuple:
@@ -291,8 +167,8 @@ class Visualization:
             f"{output_dir}video.mp4",
             f"{output_dir}output.mp4",
         )
-        video_filename = self.generate_unique_filename(video_filename, self.filename)
-        output_filename = self.generate_unique_filename(output_filename, self.filename)
+        video_filename = self.generate_unique_filename(video_filename)
+        output_filename = self.generate_unique_filename(output_filename)
 
         # Create a VideoWriter object
         print(f"Creating video from {len(image_files)} images...")
