@@ -39,7 +39,6 @@ class Bubbles(BaseGraph):
         self.flash_graph(graph, intensity, time_position, [255, 255, 255, 255])"""
         
         # Sooner:
-        # TODO: Scale radius of the outer circles based on the small circle size
         # TODO: Split the circle into 3(?) sections: 0-60, 60-120, 120-180
 
         # Later:
@@ -56,7 +55,6 @@ class Bubbles(BaseGraph):
         if not self.PALETTES:
             raise ValueError("No palettes defined for the graph")
 
-        # APPROACH 1
         total_beats = 0
         palette_id = 0
         palette = None
@@ -71,31 +69,10 @@ class Bubbles(BaseGraph):
         if palette is None:
             raise ValueError("Could not find a palette for the current beat")
 
-        # APPROACH 2
-        # palette, palette_i, total_duration_in_measures = None, 0, 0
-        # total_duration_in_beats = sum(duration * beats for _, duration in self.PALETTES)
-
-        # # Calculate the effective current beat by taking modulus with total beats
-        # # This will make the current beat cycle back to 0 after it exceeds total beats
-        # cycled_current_beat = current_beat % total_duration_in_beats
-
-        # # Find the current palette
-        # for i, (p, duration_in_measures) in enumerate(self.PALETTES):
-        #     total_duration_in_measures += duration_in_measures
-        #     if cycled_current_beat < total_duration_in_measures * beats:
-        #         palette = p
-        #         palette_i = i
-        #         break
-        
-
-        if palette is None:
-            raise ValueError("Could not find a palette for the current beat")
-
         # Get the energy of the audio at the given time position between 20 and 200 Hz
         bass_amp = audio.get_energy(time_position, 20, 200)
         bass_amp = np.interp(bass_amp, [0, 1], [0, 255])
 
-        # min_r = 150
         min_r = 120
         max_r = 350
 
@@ -105,6 +82,68 @@ class Bubbles(BaseGraph):
             pass
         else:
             graph = np.zeros((size, size, 4), dtype=np.uint8)
+
+            # Draw a large circle in the center of the graph that pulses based on the mid frequency energy
+            min_mid_freq = 1000
+            max_mid_freq = 6000
+            mid_freq_energy = audio.get_energy(
+                time_position, min_mid_freq, max_mid_freq, freq_scale_factor=0.3
+            )
+            mid_freq_scale_factor = 75
+            mid_freq_energy = np.clip(mid_freq_energy * mid_freq_scale_factor, 0, 1)
+            mid_freq_energy = np.interp(mid_freq_energy, [0, 1], [0, 255])
+
+            # Scale the radius of the circle based on the high frequency energy
+            center_circle = {
+                "margin": 10,
+                "pad": 60,
+                # Radius of the center circle
+                "r": np.clip(min_r + (mid_freq_energy / 255 - 1) * 60, None, min_r),
+            }
+
+            rng = np.random.default_rng(seed=palette_id)
+            # Do we want to rotate the graph?
+            if palette_id != 0 and rng.random() < self.ROTATE_CHANCE:
+                # Aways rotate in the opposite direction as the previous rotation
+                rotate_direction = -1 if palette_id % 2 == 0 else 1
+                # rotation_rate = rng.uniform(0.5, 0.75) * rotate_direction
+                rotation_rate = rng.uniform(0.5, 1.25) * rotate_direction
+                # Calculate the rotation angle based on the time position
+                rotation_angle = rotation_rate * time_position
+                graph = self.rotate_graph(graph, rotation_angle)
+
+            # Add a large circle in the center of the graph
+            # The value from the get_energy will be between 0 and 1.We need to scale it up to a higher range before
+            # converting it to the 255 range because naturally the energy is very low.
+            palette = self.PALETTES[palette_id % len(self.PALETTES)][0]
+            fill_color = self.interpolate_color(palette[0], palette[1], mid_freq_energy / 255 * 0.7)
+            # Apply gamma correction to darken high color values
+            fill_color = self.adjust_brightness(fill_color, 0.3)
+            # Set the transparency of the fill color by a factor of 1.5 times the bass amplitude
+            fill_color = self.set_transparency(fill_color, np.clip(bass_amp * 1.5, 0, 255))
+
+            x_center = size // 2
+            y_center = size // 2
+
+            # Uncomment to "shake" the center circle in if the bass amplitude is greater than 230
+            # if bass_amp > 230:
+            #    amount = np.interp(bass_amp, [231, 255], [0, 10])
+            #    x_center, y_center = self.beat_shake(x_center, y_center, current_beat, amount)
+
+            # Large center circle
+            blur_radius = np.clip(center_circle["r"] / 3, 0, 10)
+            self.draw_circle(
+                graph,
+                x_center,
+                y_center,
+                center_circle["r"] - center_circle["margin"] - blur_radius,
+                fill_color,
+                blur=True,
+                blur_radius=blur_radius,
+            )
+
+            # TODO: Scale min_r of the outer circles based on the center r
+            # min_r = min_r - center_circle["r"] + center_circle["margin"]
 
             # Scale the angle_step based on the palette index between 1 and .25 descending
             # angle_step_range = [1, 0.25]
@@ -158,89 +197,5 @@ class Bubbles(BaseGraph):
 
             # Cache the graph
             cache.save_graph_cache_item(time_position, graph, memory_safe=True)
-
-        # Post process the graph
-        graph = self.post_process(graph, audio, time_position, palette_id, bass_amp, min_r, size)
-        return graph
-
-    def post_process(
-        self,
-        graph: np.ndarray,
-        audio: Audio,
-        time_position: int,
-        palette_id: int,
-        bass_amp: int,
-        min_r: int,
-        size: int = 720,
-    ) -> np.ndarray:
-        """Post process the graph for a given time frame."""
-        # Add a large circle in the center of the graph
-        # The value from the get_energy will be between 0 and 1.We need to scale it up to a higher range before
-        # converting it to the 255 range because naturally the energy is very low.
-        min_mid_freq = 1000
-        max_mid_freq = 6000
-        mid_freq_energy = audio.get_energy(
-            time_position, min_mid_freq, max_mid_freq, freq_scale_factor=0.3
-        )
-        mid_freq_scale_factor = 75
-        mid_freq_energy = np.clip(mid_freq_energy * mid_freq_scale_factor, 0, 1)
-        mid_freq_energy = np.interp(mid_freq_energy, [0, 1], [0, 255])
-
-        # use the palette color with the mid_freq_energy to create a fill color
-        # fill_color = np.clip(
-        #     np.array(palette[0]) * (1 - mid_freq_energy / 255)
-        #     + np.array(palette[1]) * (mid_freq_energy / 255),
-        #     0,
-        #     255,
-        # )
-        # fill_color = self.interpolate_color(palette[0], palette[1], mid_freq_energy / 255)
-        # Adjust the weight of mid_freq_energy to make the first color in the palette more dominant
-        # fill_color = np.clip(
-        #     np.array(palette[0]) * (1 - mid_freq_energy / 255 * 0.5)
-        #     + np.array(palette[1]) * (mid_freq_energy / 255),
-        #     0,
-        #     255,
-        # )
-        palette = self.PALETTES[palette_id % len(self.PALETTES)][0]
-        fill_color = self.interpolate_color(palette[0], palette[1], mid_freq_energy / 255 * 0.7)
-        # Apply gamma correction to darken high color values
-        # fill_color = self.adjust_brightness(fill_color, 0.7)
-        # Set the transparency of the fill color by a factor of 1.5 times the bass amplitude
-        fill_color = self.set_transparency(fill_color, np.clip(bass_amp * 1.5, 0, 255))
-        # Scale the radius of the circle based on the high frequency energy
-        circle_r_margin = 10
-        circle_r_pad = 60
-        circle_r = min_r + (mid_freq_energy / 255 - 1) * circle_r_pad
-        circle_r = np.clip(circle_r, None, min_r)
-        x_center = size // 2
-        y_center = size // 2
-
-        # Uncomment to "shake" the center circle in if the bass amplitude is greater than 230
-        # if bass_amp > 230:
-        #    amount = np.interp(bass_amp, [231, 255], [0, 10])
-        #    x_center, y_center = self.beat_shake(x_center, y_center, current_beat, amount)
-
-        # Large center circle
-        blur_radius = np.clip(circle_r / 3, 0, 10)
-        self.draw_circle(
-            graph,
-            x_center,
-            y_center,
-            circle_r - circle_r_margin - blur_radius,
-            fill_color,
-            blur=True,
-            blur_radius=blur_radius,
-        )
-
-        rng = np.random.default_rng(seed=palette_id)
-        # Do we want to rotate the graph?
-        if palette_id != 0 and rng.random() < self.ROTATE_CHANCE:
-            # Aways rotate in the opposite direction as the previous rotation
-            rotate_direction = -1 if palette_id % 2 == 0 else 1
-            # rotation_rate = rng.uniform(0.5, 0.75) * rotate_direction
-            rotation_rate = rng.uniform(0.5, 1.25) * rotate_direction
-            # Calculate the rotation angle based on the time position
-            rotation_angle = rotation_rate * time_position
-            graph = self.rotate_graph(graph, rotation_angle)
 
         return graph
