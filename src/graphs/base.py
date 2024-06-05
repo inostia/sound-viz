@@ -87,14 +87,14 @@ class BaseGraph(ABC):
         # WIP
         pass
 
-    def rotate_graph(self, graph: np.ndarray, angle: float) -> np.ndarray:
+    def rotate_graph(self, graph: np.ndarray, angle: float):
         """Rotate the graph in place by a given angle"""
         # Get the center of the graph
         center = (graph.shape[1] // 2, graph.shape[0] // 2)
         # Get the rotation matrix
         rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
         # Rotate the graph
-        return cv2.warpAffine(graph, rotation_matrix, (graph.shape[1], graph.shape[0]))
+        graph[:] = cv2.warpAffine(graph, rotation_matrix, (graph.shape[1], graph.shape[0]))
 
     def adjust_brightness(self, color: np.ndarray, gamma: float = 1.0) -> np.ndarray:
         """Apply gamma correction to adjust the brightness of the color"""
@@ -126,22 +126,22 @@ class BaseGraph(ABC):
         # Combine the RGB components with the new alpha value
         return np.concatenate([rgb, [alpha]])
 
-    def rgb_to_lab(self, rgb_color):
+    def rgb_to_lab(self, rgb_color) -> np.ndarray:
         """Convert an RGB color to Lab color space."""
         rgb_color = np.array(rgb_color, dtype=np.float32) / 255
         lab_color = cv2.cvtColor(np.array([[rgb_color]]), cv2.COLOR_RGB2Lab)
         return lab_color[0][0]
 
-    def lab_to_rgb(self, lab_color):
+    def lab_to_rgb(self, lab_color) -> np.ndarray:
         """Convert a Lab color to RGB color space."""
         rgb_color = cv2.cvtColor(np.array([[lab_color]]), cv2.COLOR_Lab2RGB)
         return (rgb_color[0][0] * 255).astype(int)
     
-    def rgba_to_rgb(self, rgba_color):
+    def rgba_to_rgb(self, rgba_color) -> np.ndarray:
         """Convert an RGBA color to RGB color space."""
         return rgba_color[:3]
 
-    def interpolate_color(self, color1, color2, weight):
+    def interpolate_color(self, color1, color2, weight) -> np.ndarray:
         """Interpolate between two colors in the Lab color space."""
         # Save the alpha channel
         alpha = color1[3:]
