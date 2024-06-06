@@ -10,20 +10,23 @@ class Bubbles(BaseGraph):
     """A graph that draws circles in a wave pattern and pulses a center circle based on the frequency amplitudes."""
 
     PALETTES = [
+        # TODO: Use random palettes
+        # Also scale the amount of measures to the total engery
         (((255, 0, 0, 255), (0, 0, 255, 255)), 4),  # Red and Blue
         (((0, 255, 0, 255), (255, 255, 0, 255)), 2),  # Green and Yellow
         (((255, 0, 255, 255), (0, 255, 255, 255)), 6),  # Magenta and Cyan
-        (((0, 255, 255, 255), (255, 165, 0, 255)), 2),  # Cyan and Orange
-        (((255, 20, 147, 255), (57, 255, 20, 255)), 4),  # Deep Pink and Bright Green
+        (((0, 255, 255, 255), (255, 165, 0, 255)), 4),  # Cyan and Orange
+        (((255, 20, 147, 255), (57, 255, 20, 255)), 2),  # Deep Pink and Bright Green
         (((255, 255, 0, 255), (255, 0, 255, 255)), 6),  # Yellow and Magenta
     ]
-
     ANGLE_STEPS: list = [
         0.25,
         0.625,
         0.8,
     ]  # Repetitions of the wave pattern in each half of the circle
-    ROTATE_CHANCE: float = 0.33  # Chance to rotate the graph
+    ROTATE_CHANCE: float = 0.5  # Chance to rotate the graph
+    # SPLIT_CHANCE: tuple[int, float] = (24, 0.5)  # After n measures, chance to split the circle into 3 sections
+    SPLIT_CHANCE: tuple[int, float] = (3, 0.5)  # After n measures, chance to split the circle into 3 sections
 
     def draw(
         self,
@@ -52,7 +55,7 @@ class Bubbles(BaseGraph):
         # TODO: Finish drawing the flashing lines connecting the vertices
 
         # Use the initialize graph method to get the graph, palette_id, palette, and bass_amp
-        graph, cache_hit, palette_id, palette, bass_amp, mid_amp = (
+        graph, cache_hit, palette_id, palette, bass_amp, mid_amp, rng = (
             self.initialize_graph(time_position, audio, cache, size, use_cache, fps)
         )
         if cache_hit:
@@ -71,9 +74,9 @@ class Bubbles(BaseGraph):
             max_r,
         )
         self.draw_center_circle(
-            graph, size, palette_id, palette, bass_amp, mid_amp, min_r
+            graph, size, palette, bass_amp, mid_amp, min_r
         )
-        self.rotate_graph(graph, palette_id, time_position)
+        self.rotate_graph(graph, palette_id, time_position, rng)
 
         # Cache the graph
         cache.save_graph_cache_item(time_position, graph, memory_safe=True)
@@ -88,13 +91,27 @@ class Bubbles(BaseGraph):
         use_cache: bool,
         fps: int,
     ):
+        graph, cache_hit = self.get_graph(time_position, cache, size, use_cache)
+        if cache_hit:
+            return graph, cache_hit, None, None, None, None, None
         current_beat = audio.get_beat(time_position, fps)
         beats, unit = audio.parse_time_signature()
         palette_id, palette = self.get_palette(current_beat, beats, unit)
+        rng = np.random.default_rng(seed=palette_id)
+        # Which measure are we on?
+        measure = current_beat // beats * (4 / unit)
+        # TODO: Split the circle into 3 sections
+        if measure > self.SPLIT_CHANCE[0]:
+            # Split the palette up - draw a circle with the x,y at 0,0 so that it's only in a single quadrant
+            # Then flip/move it to the correct quadrant
+            split_chance = rng.random() < self.SPLIT_CHANCE[1]
         bass_amp = self.get_bass_amplitude(time_position, audio)
         mid_amp = self.get_mid_amplitude(time_position, audio)
-        graph, cache_hit = self.get_graph(time_position, cache, size, use_cache)
-        return graph, cache_hit, palette_id, palette, bass_amp, mid_amp
+        return graph, cache_hit, palette_id, palette, bass_amp, mid_amp, rng
+    
+    def measures_beats(self, measures: int, beats: int, unit: int):
+        """Get the number of beats in n measures."""
+        return measures * beats * (4 / unit)
 
     def get_palette(self, current_beat: int, beats: int, unit: int):
         """Get the palette for the current beat."""
@@ -103,9 +120,21 @@ class Bubbles(BaseGraph):
         total_beats = 0
         palette_id = 0
         palette = None
+        palettes = [palette for palette, _ in self.PALETTES]
+        palette_measures = [measures for _, measures in self.PALETTES]
+        palette_beats = sum([self.measures_beats(measures, beats, unit) for measures in palette_measures])
         while total_beats <= current_beat:
-            palette, measures = self.PALETTES[palette_id % len(self.PALETTES)]
-            total_beats += measures * beats * (4 / unit)
+            # TODO: Choose a measure based on the total energy of the song
+            rng = np.random.default_rng(seed=palette_id)
+            if current_beat < palette_beats:
+                palette, measures = self.PALETTES[palette_id % len(self.PALETTES)]
+            else:
+                palette = rng.choice(palettes)
+                # Chance to flip the palette
+                if rng.random() < 0.5:
+                    palette = palette[::-1]
+                measures = rng.choice(list(set(palette_measures)))
+            total_beats += self.measures_beats(measures, beats, unit)
             if total_beats > current_beat:
                 break
             palette_id += 1
@@ -113,9 +142,8 @@ class Bubbles(BaseGraph):
             raise ValueError("Could not find a palette for the current beat")
         return palette_id, palette
 
-    def rotate_graph(self, graph: np.ndarray, palette_id: int, time_position: int):
+    def rotate_graph(self, graph: np.ndarray, palette_id: int, time_position: int, rng: np.random.Generator):
         """Chance to rotate the graph based on the palette_id and time_position."""
-        rng = np.random.default_rng(seed=palette_id)
         # Do we want to rotate the graph?
         if palette_id != 0 and rng.random() < self.ROTATE_CHANCE:
             # Aways rotate in the opposite direction as the previous rotation
@@ -160,7 +188,6 @@ class Bubbles(BaseGraph):
         self,
         graph: np.ndarray,
         size: int,
-        palette_id: int,
         palette: tuple,
         bass_amp: float,
         mid_amp: float,
@@ -180,7 +207,6 @@ class Bubbles(BaseGraph):
         # Add a large circle in the center of the graph
         # The value from the get_energy will be between 0 and 1.We need to scale it up to a higher range before
         # converting it to the 255 range because naturally the energy is very low.
-        palette = self.PALETTES[palette_id % len(self.PALETTES)][0]
         color_weight = 0.7
         fill_color = self.interpolate_color(
             palette[0], palette[1], mid_amp / 255 * color_weight
