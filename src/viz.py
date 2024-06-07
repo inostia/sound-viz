@@ -56,9 +56,9 @@ class Visualization:
         # TODO: Migrate this to the graph class
         start_time = time.time()
         audio = Audio(self.filename, self.bpm, self.time_signature, self.fps)
-        graph = self.graph_class().draw(
-            time_position, self.size, audio, cache, self.fps, self.use_cache
         cache = VizCache(self.filename, len(audio.times), self.graph_class)
+        graph = self.graph_class(self.size, self.fps, self.use_cache).draw(
+            time_position, audio, cache
         )
         if save:
             return self.save_frame(
@@ -109,10 +109,9 @@ class Visualization:
         **kwargs,
     ):
         """Iterate over each time frame and pass the spectrogram slice to the given function"""
-        # TODO: Migrate this to the graph class
         audio = Audio(self.filename, self.bpm, self.time_signature, self.fps)
         n = len(audio.times)
-        cache = VizCache(self.filename, n)
+        cache = VizCache(self.filename, n, self.graph_class)
         if self.clear_cache == "all":
             cache.clear_cache()
         elif self.clear_cache == "graph":

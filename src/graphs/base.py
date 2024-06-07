@@ -1,16 +1,43 @@
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
 import cv2
 import numpy as np
 from scipy.ndimage import gaussian_filter
 
+if TYPE_CHECKING:
+    from src.audio import Audio
+    from src.cache import VizCache
+
 
 class BaseGraph(ABC):
     """Base class for all graph types."""
 
+    size: int = 720
+    fps: int = 30
+    use_cache: bool = False
+
+    def __init__(self, size: int = 720, fps: int = 30, use_cache: bool = False):
+        self.size = size
+        self.fps = fps
+        self.use_cache = use_cache
+
+    def get_graph(self, time_position: int, cache: "VizCache"):
+        """Get a graph from the cache or create a new one."""
+        if self.use_cache and (
+            (graph := cache.get_graph_cache_item(time_position)) is not None
+        ):
+            # If the graph is in the cache, return it and set the cache hit flag to True
+            return graph, True
+        # If the graph is not in the cache, create a new graph and return it with the cache hit flag set to False
+        graph = np.zeros((self.size, self.size, 4), dtype=np.uint8)
+        return graph, False
+
     # Graph manipulation functions
     @abstractmethod
-    def draw(self, time_position: int, *args, **kwargs) -> np.ndarray:
+    def draw(
+        self, time_position: int, audio: "Audio", cache: "VizCache", *args, **kwargs
+    ) -> np.ndarray:
         """Draw the graph for a given time frame."""
         pass
 
@@ -45,7 +72,7 @@ class BaseGraph(ABC):
             if err > 0:
                 x -= 1
                 err -= 2 * x + 1
-        
+
         if blur:
             for channel in range(temp_graph.shape[2]):
                 if channel < 3:  # Don't blur the alpha channel
@@ -203,7 +230,9 @@ class BaseGraph(ABC):
                 adjusted_color = color_ops[adjustment](adjusted_color, value)
         return adjusted_color
 
-    def interpolate_colors(self, color1: np.ndarray, color2: np.ndarray, weight: float = 0.5) -> np.ndarray:
+    def interpolate_colors(
+        self, color1: np.ndarray, color2: np.ndarray, weight: float = 0.5
+    ) -> np.ndarray:
         """Interpolate between two colors in the Lab color space."""
         # Save the alpha channel
         alpha = color1[3:]

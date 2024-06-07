@@ -15,7 +15,7 @@ class ColorsTest(BaseGraph):
         (((255, 255, 0, 255), (255, 0, 255, 255)), 6),  # Yellow and Magenta
     ]
 
-    def draw(self, time_position: int, size: int=720, *args, **kwargs):
+    def draw(self, time_position: int, *args, **kwargs):
         """Draw a simple gradient graph."""
         palette, _ = self.PALETTES[time_position % len(self.PALETTES)]
         angle_step = 1
@@ -29,9 +29,9 @@ class ColorsTest(BaseGraph):
         # Reverse each half of the gradient
         gradient = gradient + gradient[::-1]
         # Render the gradient in a rectangle
-        graph = np.zeros((size, size, 4), dtype=np.uint8)
+        graph = np.zeros((self.size, self.size, 4), dtype=np.uint8)
         # Plot the gradient along the x-axis
-        division = size // len(gradient)
+        division = self.size // len(gradient)
         for i, color in enumerate(gradient):
             graph[:, i * division:(i + 1) * division] = color
         return graph

@@ -36,11 +36,8 @@ class Bubbles(BaseGraph):
     def draw(
         self,
         time_position: int,
-        size: int = 720,
         audio: Audio = None,
         cache: VizCache = None,
-        fps: int = 30,
-        use_cache: bool = False,
     ) -> np.ndarray:
         """Draw the graph for a given time frame."""
 
@@ -61,7 +58,7 @@ class Bubbles(BaseGraph):
 
         # Use the initialize graph method to get the graph, palette_id, palette, and bass_amp
         graph, cache_hit, palette_id, palette, bass_amp, mid_amp, rng = (
-            self.initialize_graph(time_position, audio, cache, size, use_cache, fps)
+            self.initialize_graph(time_position, audio, cache)
         )
         if cache_hit:
             return graph
@@ -71,14 +68,13 @@ class Bubbles(BaseGraph):
             time_position,
             audio,
             graph,
-            size,
             palette_id,
             palette,
             bass_amp,
             min_r,
             max_r,
         )
-        self.draw_center_circle(graph, size, palette, bass_amp, mid_amp, min_r)
+        self.draw_center_circle(graph, palette, bass_amp, mid_amp, min_r)
         self.rotate_graph(graph, palette_id, time_position, rng)
 
         # Cache the graph
@@ -90,14 +86,11 @@ class Bubbles(BaseGraph):
         time_position: int,
         audio: Audio,
         cache: VizCache,
-        size: int,
-        use_cache: bool,
-        fps: int,
     ):
-        graph, cache_hit = self.get_graph(time_position, cache, size, use_cache)
+        graph, cache_hit = self.get_graph(time_position, cache)
         if cache_hit:
             return graph, cache_hit, None, None, None, None, None
-        current_beat = audio.get_beat(time_position, fps)
+        current_beat = audio.get_beat(time_position, self.fps)
         beats, unit = audio.parse_time_signature()
         palette_id, palette = self.get_palette(current_beat, beats, unit)
         rng = np.random.default_rng(seed=palette_id)
@@ -153,7 +146,7 @@ class Bubbles(BaseGraph):
             palette = [
                 tuple(int(p[i : i + 2], 16) for i in (1, 3, 5)) + (255,)
                 for p in palette
-            ] 
+            ]
         return palette_id, palette
 
     def rotate_graph(
@@ -191,25 +184,11 @@ class Bubbles(BaseGraph):
         mid_amplitude = np.interp(mid_amplitude, [0, 1], [0, 255])
         return mid_amplitude
 
-    def get_graph(
-        self, time_position: int, cache: VizCache, size: int, use_cache: bool
-    ):
-        """Get a graph from the cache or create a new one."""
-        if use_cache and (
-            (graph := cache.get_graph_cache_item(time_position)) is not None
-        ):
-            # If the graph is in the cache, return it and set the cache hit flag to True
-            return graph, True
-        # If the graph is not in the cache, create a new graph and return it with the cache hit flag set to False
-        graph = np.zeros((size, size, 4), dtype=np.uint8)
-        return graph, False
-
     def draw_outer_circles(
         self,
         time_position: int,
         audio: Audio,
         graph: np.ndarray,
-        size: int,
         palette_id: int,
         palette: tuple,
         bass_amp: float,
@@ -236,8 +215,8 @@ class Bubbles(BaseGraph):
                 y = r * np.cos(angle_position)
 
                 # x and y can be negative, so we need to add the size to them to make them positive
-                x += size / 2
-                y += size / 2
+                x += self.size / 2
+                y += self.size / 2
 
                 # Draw the vertex if r is greater than min_r
                 if r > min_r:
@@ -275,7 +254,6 @@ class Bubbles(BaseGraph):
     def draw_center_circle(
         self,
         graph: np.ndarray,
-        size: int,
         palette: tuple,
         bass_amp: float,
         mid_amp: float,
@@ -294,9 +272,7 @@ class Bubbles(BaseGraph):
 
         # Add a large circle in the center of the graph
         color_weight = np.interp(np.clip(mid_amp, 0, 255), [0, 255], [1, 0])
-        fill_color = self.interpolate_colors(
-            palette[0], palette[1], color_weight
-        )
+        fill_color = self.interpolate_colors(palette[0], palette[1], color_weight)
         # Saturate the color
         # fill_color = self.adjust_saturation(fill_color, 1)
         # Darken high color values with the inverse of the mid_amp
@@ -306,8 +282,8 @@ class Bubbles(BaseGraph):
         transparency = np.interp(bass_amp, [0, 255], [0.2, 1])
         fill_color = self.adjust_transparency(fill_color, transparency)
 
-        x_center = size // 2
-        y_center = size // 2
+        x_center = self.size // 2
+        y_center = self.size // 2
 
         # Uncomment to "shake" the center circle in if the bass amplitude is greater than 230
         # if bass_amp > 230:
