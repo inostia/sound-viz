@@ -8,7 +8,7 @@ from scipy.ndimage import gaussian_filter
 class BaseGraph(ABC):
     """Base class for all graph types."""
 
-
+    # Graph manipulation functions
     @abstractmethod
     def draw(self, time_position: int, *args, **kwargs) -> np.ndarray:
         """Draw the graph for a given time frame."""
@@ -94,8 +94,11 @@ class BaseGraph(ABC):
         # Get the rotation matrix
         rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
         # Rotate the graph
-        graph[:] = cv2.warpAffine(graph, rotation_matrix, (graph.shape[1], graph.shape[0]))
+        graph[:] = cv2.warpAffine(
+            graph, rotation_matrix, (graph.shape[1], graph.shape[0])
+        )
 
+    # Color adjustment functions
     def adjust_brightness(self, color: np.ndarray, gamma: float = 1.0) -> np.ndarray:
         """Apply gamma correction to adjust the brightness of the color"""
         # Separate the color into RGB and alpha components
@@ -106,8 +109,10 @@ class BaseGraph(ABC):
 
         # Combine the adjusted RGB components with the alpha component
         return np.concatenate([adjusted_rgb, alpha])
-    
-    def adjust_transparency(self, color: np.ndarray, alpha_factor: float = 1.0) -> np.ndarray:
+
+    def adjust_transparency(
+        self, color: np.ndarray, alpha_factor: float = 1.0
+    ) -> np.ndarray:
         """Adjust the transparency of the color by a given factor"""
         # Separate the color into RGB and alpha components
         rgb, old_alpha = color[:3], color[3:]
@@ -116,8 +121,8 @@ class BaseGraph(ABC):
         new_alpha = old_alpha * alpha_factor
 
         # Combine the RGB components with the new alpha value
-        return np.concatenate([rgb, [new_alpha]])
-    
+        return np.concatenate([rgb, new_alpha])
+
     def set_transparency(self, color: np.ndarray, alpha: float = 1.0) -> np.ndarray:
         """Set the transparency of the color to a given value"""
         # Separate the color into RGB and alpha components
@@ -125,6 +130,112 @@ class BaseGraph(ABC):
 
         # Combine the RGB components with the new alpha value
         return np.concatenate([rgb, [alpha]])
+
+    def adjust_saturation(
+        self, color: np.ndarray, saturation_factor: float = 1.0
+    ) -> np.ndarray:
+        """Adjust the saturation of the color by a given factor"""
+        # Separate the color into RGB and alpha components
+        rgb, alpha = color[:3], color[3:]
+
+        # Convert the RGB color to HSV color space
+        hsv_color = self.rgb_to_hsv(rgb)
+
+        # Adjust the saturation of the HSV color
+        hsv_color[1] *= saturation_factor
+
+        # Convert the HSV color back to RGB color space
+        adjusted_rgb = self.hsv_to_rgb(hsv_color)
+
+        # Combine the adjusted RGB components with the alpha component
+        return np.concatenate([adjusted_rgb, alpha])
+
+    def adjust_hue(self, color: np.ndarray, hue_factor: float = 0.0) -> np.ndarray:
+        """Adjust the hue of the color by a given factor"""
+        # Separate the color into RGB and alpha components
+        rgb, alpha = color[:3], color[3:]
+
+        # Convert the RGB color to HSV color space
+        hsv_color = self.rgb_to_hsv(rgb)
+
+        # Adjust the hue of the HSV color
+        hsv_color[0] += hue_factor
+        hsv_color[0] = hsv_color[0] % 360
+
+        # Convert the HSV color back to RGB color space
+        adjusted_rgb = self.hsv_to_rgb(hsv_color)
+
+        # Combine the adjusted RGB components with the alpha component
+        return np.concatenate([adjusted_rgb, alpha])
+
+    def adjust_contrast(
+        self, color: np.ndarray, contrast_factor: float = 1.0
+    ) -> np.ndarray:
+        """Adjust the contrast of the color by a given factor"""
+        # Separate the color into RGB and alpha components
+        rgb, alpha = color[:3], color[3:]
+
+        # Convert the RGB color to Lab color space
+        lab_color = self.rgb_to_lab(rgb)
+
+        # Adjust the contrast of the Lab color
+        lab_color[0] = 128 + contrast_factor * (lab_color[0] - 128)
+
+        # Convert the Lab color back to RGB color space
+        adjusted_rgb = self.lab_to_rgb(lab_color)
+
+        # Combine the adjusted RGB components with the alpha component
+        return np.concatenate([adjusted_rgb, alpha])
+
+    def adjust_color(self, color: np.ndarray, color_adjustments: dict) -> np.ndarray:
+        """Adjust the color of the color by the given adjustments"""
+        # Apply the color adjustments to the color
+        adjusted_color = color
+        color_ops = {
+            "brightness": self.adjust_brightness,
+            "transparency": self.adjust_transparency,
+            "saturation": self.adjust_saturation,
+            "hue": self.adjust_hue,
+            "contrast": self.adjust_contrast,
+        }
+        for adjustment, value in color_adjustments.items():
+            if value != 0 and adjustment in color_ops:
+                adjusted_color = color_ops[adjustment](adjusted_color, value)
+        return adjusted_color
+
+    def interpolate_colors(self, color1, color2, weight) -> np.ndarray:
+        """Interpolate between two colors in the Lab color space."""
+        # Save the alpha channel
+        alpha = color1[3:]
+
+        # Convert colors to Lab color space
+        lab_color1 = self.rgb_to_lab(color1[:3])
+        lab_color2 = self.rgb_to_lab(color2[:3])
+
+        # Interpolate in Lab color space
+        interpolated_color = lab_color1 * (1 - weight) + lab_color2 * weight
+
+        # Convert back to RGB color space
+        rgb_interpolated_color = self.lab_to_rgb(interpolated_color)
+
+        return np.concatenate([rgb_interpolated_color, alpha])
+
+    # Color conversion functions
+    def hsv_to_rgb(self, hsv_color) -> np.ndarray:
+        """Convert an HSV color to RGB color space."""
+        hsv_color = np.array(hsv_color, dtype=np.float32)
+        rgb_color = cv2.cvtColor(
+            np.array([[hsv_color]], dtype=np.float32), cv2.COLOR_HSV2RGB
+        )[0][0]
+        return (rgb_color * 255).astype(int)
+
+    def rgb_to_hsv(self, rgb_color) -> np.ndarray:
+        """Convert an RGB color to HSV color space."""
+        rgb_color = np.array(rgb_color, dtype=np.float32) / 255
+        hsv_color = cv2.cvtColor(
+            np.array([[rgb_color]], dtype=np.float32), cv2.COLOR_RGB2HSV
+        )[0][0]
+        return hsv_color
 
     def rgb_to_lab(self, rgb_color) -> np.ndarray:
         """Convert an RGB color to Lab color space."""
@@ -136,24 +247,3 @@ class BaseGraph(ABC):
         """Convert a Lab color to RGB color space."""
         rgb_color = cv2.cvtColor(np.array([[lab_color]]), cv2.COLOR_Lab2RGB)
         return (rgb_color[0][0] * 255).astype(int)
-    
-    def rgba_to_rgb(self, rgba_color) -> np.ndarray:
-        """Convert an RGBA color to RGB color space."""
-        return rgba_color[:3]
-
-    def interpolate_color(self, color1, color2, weight) -> np.ndarray:
-        """Interpolate between two colors in the Lab color space."""
-        # Save the alpha channel
-        alpha = color1[3:]
-
-        # Convert colors to Lab color space
-        lab_color1 = self.rgb_to_lab(self.rgba_to_rgb(color1))
-        lab_color2 = self.rgb_to_lab(self.rgba_to_rgb(color2))
-
-        # Interpolate in Lab color space
-        interpolated_color = lab_color1 * (1 - weight) + lab_color2 * weight
-
-        # Convert back to RGB color space
-        rgb_interpolated_color = self.lab_to_rgb(interpolated_color)
-
-        return np.concatenate([rgb_interpolated_color, alpha])
