@@ -45,7 +45,7 @@ class BaseGraph(ABC):
             if err > 0:
                 x -= 1
                 err -= 2 * x + 1
-
+        
         if blur:
             for channel in range(temp_graph.shape[2]):
                 if channel < 3:  # Don't blur the alpha channel
@@ -203,7 +203,7 @@ class BaseGraph(ABC):
                 adjusted_color = color_ops[adjustment](adjusted_color, value)
         return adjusted_color
 
-    def interpolate_colors(self, color1, color2, weight) -> np.ndarray:
+    def interpolate_colors(self, color1: np.ndarray, color2: np.ndarray, weight: float = 0.5) -> np.ndarray:
         """Interpolate between two colors in the Lab color space."""
         # Save the alpha channel
         alpha = color1[3:]

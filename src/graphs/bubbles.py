@@ -15,9 +15,11 @@ class Bubbles(BaseGraph):
         (((255, 0, 0, 255), (0, 0, 255, 255)), 4),  # Red and Blue
         (((0, 255, 0, 255), (255, 255, 0, 255)), 2),  # Green and Yellow
         (((255, 0, 255, 255), (0, 255, 255, 255)), 6),  # Magenta and Cyan
-        (((0, 255, 255, 255), (255, 165, 0, 255)), 4),  # Cyan and Orange
+        # (((0, 255, 255, 255), (255, 165, 0, 255)), 4),  # Cyan and Orange
         (((255, 20, 147, 255), (57, 255, 20, 255)), 2),  # Deep Pink and Bright Green
         (((255, 255, 0, 255), (255, 0, 255, 255)), 6),  # Yellow and Magenta
+        # (("#3BE600", "#DB00BC"), 1),  # Green and Pink
+        # (("#100085", "#DBBE00"), 1),  # Blue and Yellow
     ]
     ANGLE_STEPS: list = [
         0.25,
@@ -26,14 +28,17 @@ class Bubbles(BaseGraph):
     ]  # Repetitions of the wave pattern in each half of the circle
     ROTATE_CHANCE: float = 0.5  # Chance to rotate the graph
     # SPLIT_CHANCE: tuple[int, float] = (24, 0.5)  # After n measures, chance to split the circle into 3 sections
-    SPLIT_CHANCE: tuple[int, float] = (3, 0.5)  # After n measures, chance to split the circle into 3 sections
+    SPLIT_CHANCE: tuple[int, float] = (
+        3,
+        0.5,
+    )  # After n measures, chance to split the circle into 3 sections
 
     def draw(
         self,
         time_position: int,
-        audio: Audio,
-        cache: VizCache,
         size: int = 720,
+        audio: Audio = None,
+        cache: VizCache = None,
         fps: int = 30,
         use_cache: bool = False,
     ) -> np.ndarray:
@@ -73,9 +78,7 @@ class Bubbles(BaseGraph):
             min_r,
             max_r,
         )
-        self.draw_center_circle(
-            graph, size, palette, bass_amp, mid_amp, min_r
-        )
+        self.draw_center_circle(graph, size, palette, bass_amp, mid_amp, min_r)
         self.rotate_graph(graph, palette_id, time_position, rng)
 
         # Cache the graph
@@ -108,7 +111,7 @@ class Bubbles(BaseGraph):
         bass_amp = self.get_bass_amplitude(time_position, audio)
         mid_amp = self.get_mid_amplitude(time_position, audio)
         return graph, cache_hit, palette_id, palette, bass_amp, mid_amp, rng
-    
+
     def measures_beats(self, measures: int, beats: int, unit: int):
         """Get the number of beats in n measures."""
         return measures * beats * (4 / unit)
@@ -122,7 +125,12 @@ class Bubbles(BaseGraph):
         palette = None
         palettes = [palette for palette, _ in self.PALETTES]
         palette_measures = [measures for _, measures in self.PALETTES]
-        palette_beats = sum([self.measures_beats(measures, beats, unit) for measures in palette_measures])
+        palette_beats = sum(
+            [
+                self.measures_beats(measures, beats, unit)
+                for measures in palette_measures
+            ]
+        )
         while total_beats <= current_beat:
             # TODO: Choose a measure based on the total energy of the song
             rng = np.random.default_rng(seed=palette_id)
@@ -140,9 +148,21 @@ class Bubbles(BaseGraph):
             palette_id += 1
         if palette is None:
             raise ValueError("Could not find a palette for the current beat")
+        if isinstance(palette[0], str):
+            # Convert the hex to rgb
+            palette = [
+                tuple(int(p[i : i + 2], 16) for i in (1, 3, 5)) + (255,)
+                for p in palette
+            ] 
         return palette_id, palette
 
-    def rotate_graph(self, graph: np.ndarray, palette_id: int, time_position: int, rng: np.random.Generator):
+    def rotate_graph(
+        self,
+        graph: np.ndarray,
+        palette_id: int,
+        time_position: int,
+        rng: np.random.Generator,
+    ):
         """Chance to rotate the graph based on the palette_id and time_position."""
         # Do we want to rotate the graph?
         if palette_id != 0 and rng.random() < self.ROTATE_CHANCE:
@@ -157,7 +177,7 @@ class Bubbles(BaseGraph):
     def get_bass_amplitude(self, time_position: int, audio: Audio):
         """Get the bass amplitude for the current time position."""
         bass_amplitude = audio.get_energy(time_position, 20, 200)
-        bass_amplitude = np.interp(bass_amplitude, [0, 1], [0, 255])
+        bass_amplitude = np.interp(bass_amplitude, [0, 1.5], [0, 255])
         return bass_amplitude
 
     def get_mid_amplitude(self, time_position: int, audio: Audio, multiplier: int = 75):
@@ -183,60 +203,6 @@ class Bubbles(BaseGraph):
         # If the graph is not in the cache, create a new graph and return it with the cache hit flag set to False
         graph = np.zeros((size, size, 4), dtype=np.uint8)
         return graph, False
-
-    def draw_center_circle(
-        self,
-        graph: np.ndarray,
-        size: int,
-        palette: tuple,
-        bass_amp: float,
-        mid_amp: float,
-        min_r: int = 120,
-    ):
-        # Scale the radius of the circle based on the high frequency energy
-        margin = 10
-        # Normalize mid_amp to a range between -1 and 0
-        normalized_mid_amp = mid_amp / 255 - 1
-        # Scale the normalized mid_amp by a factor of 60
-        scaled_mid_amp = normalized_mid_amp * 60
-        # Calculate the radius based on min_r and the scaled mid_amp - ensure the radius doesn't exceed min_r
-        r = np.clip(
-            min_r + scaled_mid_amp, None, min_r
-        )  # Radius of the center circle, weighted by mid_amp
-
-        # Add a large circle in the center of the graph
-        # The value from the get_energy will be between 0 and 1.We need to scale it up to a higher range before
-        # converting it to the 255 range because naturally the energy is very low.
-        color_weight = 0.7
-        fill_color = self.interpolate_color(
-            palette[0], palette[1], mid_amp / 255 * color_weight
-        )
-        # Apply gamma correction to darken high color values
-        fill_color = self.adjust_brightness(fill_color, 0.3)
-        # Set the transparency of the fill color by a factor of 1.5 times the bass amplitude
-        fill_color = self.set_transparency(fill_color, np.clip(bass_amp * 1.5, 0, 255))
-
-        x_center = size // 2
-        y_center = size // 2
-
-        # Uncomment to "shake" the center circle in if the bass amplitude is greater than 230
-        # if bass_amp > 230:
-        #    amount = np.interp(bass_amp, [231, 255], [0, 10])
-        #    x_center, y_center = self.beat_shake(x_center, y_center, current_beat, amount)
-
-        # Large center circle
-        blur_radius = np.clip(r / 3, 0, 10)
-
-        # TODO: Add texture to the center circle by adding an argument to draw_circle that takes a texture function
-        self.draw_circle(
-            graph,
-            x_center,
-            y_center,
-            r - margin - blur_radius,
-            fill_color,
-            blur=True,
-            blur_radius=blur_radius,
-        )
 
     def draw_outer_circles(
         self,
@@ -284,12 +250,16 @@ class Bubbles(BaseGraph):
                     scaled_r = np.clip(int(scaled_r), min_px, max_px)
 
                     # Scale the color by angle_position
-                    circle_color = self.interpolate_color(
+                    circle_color = self.interpolate_colors(
                         palette[0], palette[1], angle_position / 180
                     )
                     # Scale brightness by the bass amplitude
-                    gamma = np.interp(bass_amp, [0, 255], [0.8, 1.2])
-                    circle_color = self.adjust_brightness(circle_color, gamma)
+                    # gamma = np.interp(bass_amp, [0, 255], [0.8, 1.2])
+                    # circle_color = self.adjust_brightness(circle_color, gamma)
+
+                    # Scale transparency of the circles by the bass amplitude
+                    transparency = np.interp(bass_amp, [0, 255], [0.2, 1])
+                    circle_color = self.adjust_transparency(circle_color, transparency)
 
                     # Draw a circle of radius increased_size at (x, y) with color scaled_color
                     self.draw_circle(
@@ -301,3 +271,59 @@ class Bubbles(BaseGraph):
                         blur=True,
                         blur_radius=scaled_r / 3,
                     )
+
+    def draw_center_circle(
+        self,
+        graph: np.ndarray,
+        size: int,
+        palette: tuple,
+        bass_amp: float,
+        mid_amp: float,
+        min_r: int = 120,
+    ):
+        # Scale the radius of the circle based on the high frequency energy
+        margin = 10
+        # Normalize mid_amp to a range between -1 and 0
+        normalized_mid_amp = mid_amp / 255 - 1
+        # Scale the normalized mid_amp by a factor of 60
+        scaled_mid_amp = normalized_mid_amp * 60
+        # Calculate the radius based on min_r and the scaled mid_amp - ensure the radius doesn't exceed min_r
+        r = np.clip(
+            min_r + scaled_mid_amp, None, min_r
+        )  # Radius of the center circle, weighted by mid_amp
+
+        # Add a large circle in the center of the graph
+        color_weight = np.interp(np.clip(mid_amp, 0, 255), [0, 255], [1, 0])
+        fill_color = self.interpolate_colors(
+            palette[0], palette[1], color_weight
+        )
+        # Saturate the color
+        # fill_color = self.adjust_saturation(fill_color, 1)
+        # Darken high color values with the inverse of the mid_amp
+        # fill_color = self.adjust_brightness(fill_color, np.interp(mid_amp, [0, 255], [0.3, 1]))
+        # Set the transparency of the fill color by a factor of 1.5 times the bass amplitude
+        # fill_color = self.set_transparency(fill_color, np.clip(bass_amp * 1.5, 0, 255))
+        transparency = np.interp(bass_amp, [0, 255], [0.2, 1])
+        fill_color = self.adjust_transparency(fill_color, transparency)
+
+        x_center = size // 2
+        y_center = size // 2
+
+        # Uncomment to "shake" the center circle in if the bass amplitude is greater than 230
+        # if bass_amp > 230:
+        #    amount = np.interp(bass_amp, [231, 255], [0, 10])
+        #    x_center, y_center = self.beat_shake(x_center, y_center, current_beat, amount)
+
+        # Large center circle
+        blur_radius = np.clip(r / 3, 0, 10)
+
+        # TODO: Add texture to the center circle by adding an argument to draw_circle that takes a texture function
+        self.draw_circle(
+            graph,
+            x_center,
+            y_center,
+            r - margin - blur_radius,
+            fill_color,
+            blur=True,
+            blur_radius=blur_radius,
+        )
