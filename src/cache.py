@@ -1,7 +1,10 @@
 import os
 import shutil
+from typing import Type
 
 import numpy as np
+
+from src.graphs.base import BaseGraph
 
 CACHE_DIR = ".cache/"
 GRAPH_CACHE_KEY = "graph"
@@ -20,13 +23,15 @@ class VizCache:
     img_cache_dir: str = ""
     img_cache_files: list = []
 
-    def __init__(self, filename: str, length: int):
-        """Initialize the cache with a given filename and length."""
+    def __init__(self, filename: str, length: int, graph_class: Type[BaseGraph]):
+        """Initialize the cache for a given audio file and length."""
         self.filename = filename
         self.length = length
         self.cache = {}
+        # Convert the graph_class into a string to use as a subdirectory in the cache directory
+        self.cache_dir = f"{CACHE_DIR}{graph_class.__name__}/"
         self.cache_dir = (
-            f"{CACHE_DIR}{os.path.splitext(os.path.basename(self.filename))[0]}/"
+            f"{self.cache_dir}{os.path.splitext(os.path.basename(self.filename))[0]}/"
         )
         os.makedirs(self.cache_dir, exist_ok=True)
         self._init_graph_cache()
