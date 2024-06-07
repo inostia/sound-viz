@@ -6,12 +6,15 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_compl
 from typing import Type
 
 import cv2
+import matplotlib.pyplot as plt
 import numpy as np
-import pygame
 
 from src.audio import Audio
 from src.cache import VizCache
 from src.graphs.base import BaseGraph
+
+plt.rcParams["figure.facecolor"] = "black"
+plt.rcParams["axes.facecolor"] = "black"
 
 
 class Visualization:
@@ -48,27 +51,53 @@ class Visualization:
         self.use_cache = use_cache
         self.clear_cache = clear_cache
 
-    def process_frame(self, time_position: int, screen: pygame.Surface = None) -> str:
+    def process_frame(self, time_position: int, save: bool = False) -> str:
         """Process a single frame of the visualization."""
+        # TODO: Migrate this to the graph class
         start_time = time.time()
         audio = Audio(self.filename, self.bpm, self.time_signature, self.fps)
         cache = VizCache(self.filename, len(audio.times))
         graph = self.graph_class().draw(
-            time_position, audio, cache, self.size, self.fps, self.use_cache
+            time_position, self.size, audio, cache, self.fps, self.use_cache
         )
-        # If a screen is provided, render the frame to the screen
-        # Otherwise, save the frame to a file
-        if screen is not None:
-            self.render_frame(screen, graph)
-        else:
+        if save:
             return self.save_frame(
                 time_position, graph, cache
             ), time.time() - start_time
+        return graph, time.time() - start_time
 
-    def save_frame(self, time_position: int, graph: np.ndarray, cache: VizCache) -> str:
+    def save_frame_orig(self, time_position: int, graph: np.ndarray, cache: VizCache) -> str:
         """Save the graph to a file"""
         image_filename = f"{cache.img_cache_dir}{time_position}.png"
         cv2.imwrite(image_filename, graph)
+        return image_filename
+
+    def save_frame(self, time_position: int, graph: np.ndarray, cache: VizCache, bg: int = 0) -> str:
+        """Save the graph to a file"""
+        # Create an RGB black image of the same size as graph
+        background = np.zeros((graph.shape[0], graph.shape[1], 3), dtype=graph.dtype)
+        background[:, :, :] = bg
+
+        # Convert from 255 to 0, 1 range
+        graph = graph / 255
+
+        # Split the graph into RGB and alpha channels
+        rgb, alpha = graph[..., :3], graph[..., 3:]
+    
+        # Alpha should be the same shape as RGB
+        alpha = np.repeat(alpha, 3, axis=-1)
+
+        # Blend the RGB channels of graph and background using the alpha channel as the mask
+        blended_rgb = rgb * alpha + background * (1 - alpha)
+
+        # Convert blended back to the range [0, 255]
+        blended = np.clip(blended_rgb * 255, 0, 255).astype(np.uint8)
+
+        image_filename = f"{cache.img_cache_dir}{time_position}.png"
+        
+        # Convert the RGB to BGR
+        blended = cv2.cvtColor(blended, cv2.COLOR_RGB2BGR)
+        cv2.imwrite(image_filename, blended)
         return image_filename
 
     def process_time_frames(
@@ -80,6 +109,7 @@ class Visualization:
         **kwargs,
     ):
         """Iterate over each time frame and pass the spectrogram slice to the given function"""
+        # TODO: Migrate this to the graph class
         audio = Audio(self.filename, self.bpm, self.time_signature, self.fps)
         n = len(audio.times)
         cache = VizCache(self.filename, n)
@@ -140,10 +170,7 @@ class Visualization:
             output_dir = os.path.dirname(filename)
             # Use the last modified file in the directory as the seed
             hash_seed = max(
-                [
-                    os.path.join(output_dir, f)
-                    for f in os.listdir(output_dir)
-                ],
+                [os.path.join(output_dir, f) for f in os.listdir(output_dir)],
                 key=os.path.getmtime,
             )
             hash = hashlib.md5(hash_seed.encode())
@@ -155,7 +182,7 @@ class Visualization:
         """Create a video from the images generated for each time frame and add the original audio."""
         # Gen_file and save an image for each time frame
         image_files, avg_took = self.process_time_frames(
-            self.process_frame, async_mode, async_workers
+            self.process_frame, async_mode, async_workers, save=True
         )
 
         # Get the size of and name image
@@ -204,41 +231,11 @@ class Visualization:
         subprocess.run(command, check=True)
         return video_filename, output_filename, avg_took
 
-    def render_frame(self, screen: pygame.Surface, graph: np.ndarray):
-        """Render a single frame"""
-        # Convert the graph to a pygame surface
-        surface = pygame.surfarray.make_surface(graph)
-        surface = pygame.transform.scale(surface, (self.size, self.size))
-        screen.blit(surface, (0, 0))
-        pygame.display.flip()
-
-    def render(self, screen: pygame.Surface):
-        # TODO: Implement this method
-        pass
-        # t = pygame.time.get_ticks()
-        # getTicksLastFrame = t
-        # # pygame.mixer.music.load(self.filename)
-        # # pygame.mixer.music.play(0)
-
-        # # Run until the user asks to quit
-        # running = True
-        # while running:
-        #     # Did the user click the window close button?
-        #     for event in pygame.event.get():
-        #         if event.type == pygame.QUIT:
-        #             running = False
-
-        #     # Draw the graph
-        #     self.process_frame(
-        #         int(pygame.time.get_ticks() / 1000 * self.audio.time_index_ratio),
-        #         screen,
-        #     )
-
-        #     # Cap the frame rate
-        #     t = pygame.time.get_ticks()
-        #     while t - getTicksLastFrame < 1000 / self.fps:
-        #         t = pygame.time.get_ticks()
-        #     getTicksLastFrame = t
-
-        # Done! Time to quit.
-        # pygame.quit()
+    def screen(self):
+        """Display the visualization on the screen"""
+        # i = 42
+        i = 0
+        graph, _ = self.process_frame(i)
+        # Use pyplot to render the graph
+        plt.imshow(graph)
+        plt.show()

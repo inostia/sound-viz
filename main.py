@@ -3,8 +3,6 @@ import os
 import subprocess
 import time
 
-import pygame
-
 from src.viz import Visualization
 
 if __name__ == "__main__":
@@ -14,8 +12,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--mode",
         type=str,
-        choices=["video", "pygame"],
-        help="The mode to run the visualization in (video or pygame render)",
+        choices=["video", "screen"],
+        help="The mode to run the visualization in",
         default="video",
     )
 
@@ -116,10 +114,8 @@ if __name__ == "__main__":
         subprocess.run(
             f"open {viz_output}", shell=True
         )
-    elif args.mode == "pygame":
-        # Start a pygame window
-        screen = pygame.display.set_mode((args.size, args.size))
-        viz.render(screen)
+    elif args.mode == "screen":
+        viz.screen()
     else:
         print("Invalid mode.")
         exit()
