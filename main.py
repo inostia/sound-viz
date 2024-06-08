@@ -14,7 +14,7 @@ if __name__ == "__main__":
         type=str,
         choices=["video", "screen"],
         help="The mode to run the visualization in",
-        default="video",
+        default="screen",
     )
 
     parser.add_argument(
@@ -65,15 +65,15 @@ if __name__ == "__main__":
         "--async-mode",
         type=str,
         choices=["on", "off"],
-        help="Multi-processing or multi-threading mode.",
-        default="thread",
+        help="Whether to use async mode",
+        default="off",
     )
 
     parser.add_argument(
         "--async-workers",
         type=int,
         help="The maximum number of workers to use for async mode.",
-        default=12,
+        default=8,
     )
 
     parser.add_argument(
@@ -115,7 +115,7 @@ if __name__ == "__main__":
             f"open {viz_output}", shell=True
         )
     elif args.mode == "screen":
-        viz.screen()
+        viz.display_screen()
     else:
         print("Invalid mode.")
         exit()

@@ -12,6 +12,7 @@ import numpy as np
 from src.audio import Audio
 from src.cache import VizCache
 from src.graphs.base import BaseGraph
+from src.utils import generate_unique_filename
 
 plt.rcParams["figure.facecolor"] = "black"
 plt.rcParams["axes.facecolor"] = "black"
@@ -51,9 +52,38 @@ class Visualization:
         self.use_cache = use_cache
         self.clear_cache = clear_cache
 
+    def save_frame(
+        self, time_position: int, graph: np.ndarray, cache: VizCache, bg: int = 0
+    ) -> str:
+        """Save the graph to a file"""
+        # Create an RGB black image of the same size as graph
+        background = np.zeros((graph.shape[0], graph.shape[1], 3), dtype=graph.dtype)
+        background[:, :, :] = bg
+
+        # Convert from 255 to 0, 1 range
+        graph = graph / 255
+
+        # Split the graph into RGB and alpha channels
+        rgb, alpha = graph[..., :3], graph[..., 3:]
+
+        # Alpha should be the same shape as RGB
+        alpha = np.repeat(alpha, 3, axis=-1)
+
+        # Blend the RGB channels of graph and background using the alpha channel as the mask
+        blended_rgb = rgb * alpha + background * (1 - alpha)
+
+        # Convert blended back to the range [0, 255]
+        blended = np.clip(blended_rgb * 255, 0, 255).astype(np.uint8)
+
+        image_filename = f"{cache.img_cache_dir}{time_position}.png"
+
+        # Convert the RGB to BGR
+        blended = cv2.cvtColor(blended, cv2.COLOR_RGB2BGR)
+        cv2.imwrite(image_filename, blended)
+        return image_filename
+
     def process_frame(self, time_position: int, save: bool = False) -> str:
         """Process a single frame of the visualization."""
-        # TODO: Migrate this to the graph class
         start_time = time.time()
         audio = Audio(self.filename, self.bpm, self.time_signature, self.fps)
         cache = VizCache(self.filename, len(audio.times), self.graph_class)
@@ -65,40 +95,6 @@ class Visualization:
                 time_position, graph, cache
             ), time.time() - start_time
         return graph, time.time() - start_time
-
-    def save_frame_orig(self, time_position: int, graph: np.ndarray, cache: VizCache) -> str:
-        """Save the graph to a file"""
-        image_filename = f"{cache.img_cache_dir}{time_position}.png"
-        cv2.imwrite(image_filename, graph)
-        return image_filename
-
-    def save_frame(self, time_position: int, graph: np.ndarray, cache: VizCache, bg: int = 0) -> str:
-        """Save the graph to a file"""
-        # Create an RGB black image of the same size as graph
-        background = np.zeros((graph.shape[0], graph.shape[1], 3), dtype=graph.dtype)
-        background[:, :, :] = bg
-
-        # Convert from 255 to 0, 1 range
-        graph = graph / 255
-
-        # Split the graph into RGB and alpha channels
-        rgb, alpha = graph[..., :3], graph[..., 3:]
-    
-        # Alpha should be the same shape as RGB
-        alpha = np.repeat(alpha, 3, axis=-1)
-
-        # Blend the RGB channels of graph and background using the alpha channel as the mask
-        blended_rgb = rgb * alpha + background * (1 - alpha)
-
-        # Convert blended back to the range [0, 255]
-        blended = np.clip(blended_rgb * 255, 0, 255).astype(np.uint8)
-
-        image_filename = f"{cache.img_cache_dir}{time_position}.png"
-        
-        # Convert the RGB to BGR
-        blended = cv2.cvtColor(blended, cv2.COLOR_RGB2BGR)
-        cv2.imwrite(image_filename, blended)
-        return image_filename
 
     def process_time_frames(
         self,
@@ -163,20 +159,6 @@ class Visualization:
         avg_took = sum(took) / len(took)
         return collection, avg_took
 
-    def generate_unique_filename(self, filename) -> str:
-        """Generate a unique filename by appending a hash if the file already exists"""
-        if os.path.exists(filename):
-            output_dir = os.path.dirname(filename)
-            # Use the last modified file in the directory as the seed
-            hash_seed = max(
-                [os.path.join(output_dir, f) for f in os.listdir(output_dir)],
-                key=os.path.getmtime,
-            )
-            hash = hashlib.md5(hash_seed.encode())
-            basename, ext = os.path.splitext(filename)
-            return f"{basename}_{hash.hexdigest()[:5]}{ext}"
-        return filename
-
     def create_video(self, async_mode: str = "off", async_workers: int = 4) -> tuple:
         """Create a video from the images generated for each time frame and add the original audio."""
         # Gen_file and save an image for each time frame
@@ -193,8 +175,8 @@ class Visualization:
             f"{output_dir}video.mp4",
             f"{output_dir}output.mp4",
         )
-        video_filename = self.generate_unique_filename(video_filename)
-        output_filename = self.generate_unique_filename(output_filename)
+        video_filename = generate_unique_filename(video_filename)
+        output_filename = generate_unique_filename(output_filename)
 
         # Create a VideoWriter object
         print(f"Creating video from {len(image_files)} images...")
@@ -230,11 +212,13 @@ class Visualization:
         subprocess.run(command, check=True)
         return video_filename, output_filename, avg_took
 
-    def screen(self):
+    def display_screen(self):
         """Display the visualization on the screen"""
-        # i = 42
+
         i = 0
-        graph, _ = self.process_frame(i)
-        # Use pyplot to render the graph
-        plt.imshow(graph)
-        plt.show()
+        processed_frame, _ = self.process_frame(i)
+        if isinstance(processed_frame, plt.Axes):
+            plt.show()
+        elif isinstance(processed_frame, np.ndarray):
+            plt.imshow(processed_frame)
+            plt.show()
