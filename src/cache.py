@@ -1,8 +1,10 @@
 import os
+import pickle
 import shutil
 from typing import Type
 
 import numpy as np
+from matplotlib import pyplot as plt
 
 from src.graphs.base import BaseGraph
 
@@ -80,7 +82,7 @@ class VizCache:
                 shutil.rmtree(f"{self.cache_dir}{filename}")
             else:
                 os.remove(f"{self.cache_dir}{filename}")
-    
+
     def clear_graph_cache(self):
         """Clear the graph cache directory"""
         print(f"Clearing graph cache directory: {self.graph_cache_dir}")
@@ -93,13 +95,17 @@ class VizCache:
         for filename in os.listdir(self.img_cache_dir):
             os.remove(f"{self.img_cache_dir}{filename}")
 
-    def get_graph_cache_item(self, i: int) -> np.ndarray:
+    def get_graph_cache_item(self, i: int) -> np.ndarray | plt.Axes:
         """Return the graph cache item for a given index"""
         if self.graph_cache_contains(i):
             return self.cache[GRAPH_CACHE_KEY][i]
         if not self.graph_cache_file_exists(i):
             return
-        return np.load(f"{self.graph_cache_dir}{i}.npy")
+        if self.graph_cache_files[i].endswith(".npy"):
+            return np.load(f"{self.graph_cache_dir}{i}.npy")
+        elif self.graph_cache_files[i].endswith(".pickle"):
+            with open(f"{self.graph_cache_dir}{i}.pickle", "rb") as f:
+                return pickle.load(f)
 
     def graph_cache_contains(self, i: int) -> bool:
         """Check if an item is in the graph cache"""
@@ -111,13 +117,17 @@ class VizCache:
 
     def graph_cache_file_exists(self, i: int) -> bool:
         """Check if a graph cache file exists"""
-        return f"{i}.npy" in self.graph_cache_files
+        return i < len(self.graph_cache_files)
 
     def save_graph_cache_item(
-        self, i: int, graph: np.ndarray, memory_safe: bool = False
+        self, i: int, graph: np.ndarray | plt.Axes, memory_safe: bool = False
     ):
         """Save the graph cache to a file so it can be used later"""
-        np.save(f"{self.graph_cache_dir}{i}.npy", graph)
+        if isinstance(graph, np.ndarray):
+            np.save(f"{self.graph_cache_dir}{i}.npy", graph)
+        else:
+            with open(f"{self.graph_cache_dir}{i}.pickle", "wb") as f:
+                pickle.dump(graph, f)
         if not memory_safe:
             self.set_graph_cache_item(i, graph)
 

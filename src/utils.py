@@ -2,7 +2,7 @@ import hashlib
 import os
 
 
-def generate_unique_filename(self, filename) -> str:
+def generate_unique_filename(filename) -> str:
     """Generate a unique filename by appending a hash if the file already exists"""
     if os.path.exists(filename):
         output_dir = os.path.dirname(filename)

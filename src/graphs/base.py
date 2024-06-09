@@ -36,7 +36,7 @@ class BaseGraph(ABC):
     # Graph manipulation functions
     @abstractmethod
     def draw(
-        self, time_position: int, audio: "Audio", cache: "VizCache", *args, **kwargs
+        self, time_position: int, async_mode: str, audio: "Audio", cache: "VizCache", *args, **kwargs
     ) -> np.ndarray:
         """Draw the graph for a given time frame."""
         pass
@@ -83,30 +83,35 @@ class BaseGraph(ABC):
         np.add(graph, temp_graph, out=graph, casting="unsafe")
 
     def beat_shake(
-        self, x_center: int, y_center: int, beat: float, amount: int = 0
+        self, audio: "Audio", time_position: int, point: tuple[int, int, int], amount: int
     ) -> tuple[int, int]:
-        """Shake the x and y coords by a small amount"""
+        """Shake the x and y coords by a small amount
+        
+        TODO: This doesn't really represent the physics of a shake, we need to do some more work on this
+        before it's ready for prime time."""
+        x, y, z = point
+        beat = audio.get_beat(time_position, self.fps)
+
         # Create a random number generator with a seed based on the current beat
         beat_rng = np.random.default_rng(seed=int(beat))
 
-        # Get the fractional part of current_beat
-        current_beat_frac = beat - int(beat)
-
         # Make the scale factor start slow and then accelerate by taking the square root of the fractional part of current_beat
-        scale_factor = np.sqrt(current_beat_frac)
+        scale_factor = np.sqrt(beat % 1)
 
         # Generate a random shake angle for each frame within a beat
         shake_angle = beat_rng.uniform(0, 2 * np.pi)
 
-        # Calculate the x and y shift based on the shake angle and scale factor
+        # Calculate the x, y, and z shift based on the shake angle and scale factor
         x_shift = scale_factor * amount * np.cos(shake_angle)
         y_shift = scale_factor * amount * np.sin(shake_angle)
+        z_shift = scale_factor * amount * np.sin(shake_angle)
 
-        # Update the center of the circle
-        x_center += int(x_shift)
-        y_center += int(y_shift)
+        # Update the coordinates with the shake
+        x += int(x_shift)
+        y += int(y_shift)
+        z += int(z_shift)
 
-        return x_center, y_center
+        return x, y, z
 
     def flash_graph(
         self, graph: np.ndarray, intensity: int, time_position: int, color: list[int]

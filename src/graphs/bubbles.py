@@ -36,8 +36,11 @@ class Bubbles(BaseGraph):
     def draw(
         self,
         time_position: int,
+        async_mode: str,
         audio: Audio = None,
         cache: VizCache = None,
+        *args,
+        **kwargs,
     ) -> np.ndarray:
         """Draw the graph for a given time frame."""
 
@@ -92,7 +95,7 @@ class Bubbles(BaseGraph):
             return graph, cache_hit, None, None, None, None, None
         current_beat = audio.get_beat(time_position, self.fps)
         beats, unit = audio.parse_time_signature()
-        palette_id, palette = self.get_palette(current_beat, beats, unit)
+        palette_id, palette = self.get_palette(current_beat, audio)
         rng = np.random.default_rng(seed=palette_id)
         # Which measure are we on?
         measure = current_beat // beats * (4 / unit)
@@ -105,11 +108,7 @@ class Bubbles(BaseGraph):
         mid_amp = self.get_mid_amplitude(time_position, audio)
         return graph, cache_hit, palette_id, palette, bass_amp, mid_amp, rng
 
-    def measures_beats(self, measures: int, beats: int, unit: int):
-        """Get the number of beats in n measures."""
-        return measures * beats * (4 / unit)
-
-    def get_palette(self, current_beat: int, beats: int, unit: int):
+    def get_palette(self, current_beat: int, audio: Audio):
         """Get the palette for the current beat."""
         if not self.PALETTES:
             raise ValueError("No palettes defined for the graph")
@@ -120,7 +119,7 @@ class Bubbles(BaseGraph):
         palette_measures = [measures for _, measures in self.PALETTES]
         palette_beats = sum(
             [
-                self.measures_beats(measures, beats, unit)
+                audio.total_beats_in_measures(measures)
                 for measures in palette_measures
             ]
         )
@@ -135,7 +134,7 @@ class Bubbles(BaseGraph):
                 if rng.random() < 0.5:
                     palette = palette[::-1]
                 measures = rng.choice(list(set(palette_measures)))
-            total_beats += self.measures_beats(measures, beats, unit)
+            total_beats += audio.total_beats_in_measures(measures)
             if total_beats > current_beat:
                 break
             palette_id += 1

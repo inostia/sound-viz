@@ -1,4 +1,3 @@
-import hashlib
 import os
 import subprocess
 import time
@@ -14,8 +13,14 @@ from src.cache import VizCache
 from src.graphs.base import BaseGraph
 from src.utils import generate_unique_filename
 
-plt.rcParams["figure.facecolor"] = "black"
-plt.rcParams["axes.facecolor"] = "black"
+
+def init_plt(plt):
+    plt.rcParams["figure.facecolor"] = "black"
+    plt.rcParams["axes.facecolor"] = "black"
+
+
+# Initialize the matplotlib settings
+init_plt(plt)
 
 
 class Visualization:
@@ -53,42 +58,56 @@ class Visualization:
         self.clear_cache = clear_cache
 
     def save_frame(
-        self, time_position: int, graph: np.ndarray, cache: VizCache, bg: int = 0
+        self,
+        time_position: int,
+        graph: np.ndarray | plt.Axes,
+        cache: VizCache,
+        bg: int = 0,
     ) -> str:
         """Save the graph to a file"""
-        # Create an RGB black image of the same size as graph
-        background = np.zeros((graph.shape[0], graph.shape[1], 3), dtype=graph.dtype)
-        background[:, :, :] = bg
-
-        # Convert from 255 to 0, 1 range
-        graph = graph / 255
-
-        # Split the graph into RGB and alpha channels
-        rgb, alpha = graph[..., :3], graph[..., 3:]
-
-        # Alpha should be the same shape as RGB
-        alpha = np.repeat(alpha, 3, axis=-1)
-
-        # Blend the RGB channels of graph and background using the alpha channel as the mask
-        blended_rgb = rgb * alpha + background * (1 - alpha)
-
-        # Convert blended back to the range [0, 255]
-        blended = np.clip(blended_rgb * 255, 0, 255).astype(np.uint8)
-
         image_filename = f"{cache.img_cache_dir}{time_position}.png"
 
-        # Convert the RGB to BGR
-        blended = cv2.cvtColor(blended, cv2.COLOR_RGB2BGR)
-        cv2.imwrite(image_filename, blended)
-        return image_filename
+        if isinstance(graph, plt.Figure):
+            graph.savefig(image_filename, dpi=300, facecolor="black")
+            plt.close(graph)
+            return image_filename
+        if isinstance(graph, np.ndarray):
+            if np.shape(graph)[2] == 4:
+                # If the graph has an alpha channel, blend it with a black background
+                background = np.zeros(
+                    (graph.shape[0], graph.shape[1], 3), dtype=graph.dtype
+                )
+                background[:, :, :] = bg
 
-    def process_frame(self, time_position: int, save: bool = False) -> str:
+                # Convert from 255 to 0, 1 range
+                graph = graph / 255
+
+                # Split the graph into RGB and alpha channels
+                rgb, alpha = graph[..., :3], graph[..., 3:]
+
+                # Alpha should be the same shape as RGB
+                alpha = np.repeat(alpha, 3, axis=-1)
+
+                # Blend the RGB channels of graph and background using the alpha channel as the mask
+                blended_rgb = rgb * alpha + background * (1 - alpha)
+
+                # Convert blended back to the range [0, 255]
+                blended = np.clip(blended_rgb * 255, 0, 255).astype(np.uint8)
+
+                # Convert the RGB to BGR
+                graph = cv2.cvtColor(blended, cv2.COLOR_RGB2BGR)
+            cv2.imwrite(image_filename, graph)
+            return image_filename
+        else:
+            raise TypeError("Input must be a matplotlib Axes object or a numpy array.")
+
+    def process_frame(self, time_position: int, async_mode: str, save: bool = False, *args, **kwargs) -> str:
         """Process a single frame of the visualization."""
         start_time = time.time()
         audio = Audio(self.filename, self.bpm, self.time_signature, self.fps)
         cache = VizCache(self.filename, len(audio.times), self.graph_class)
         graph = self.graph_class(self.size, self.fps, self.use_cache).draw(
-            time_position, audio, cache
+            time_position, async_mode, audio, cache, *args, **kwargs
         )
         if save:
             return self.save_frame(
@@ -122,7 +141,7 @@ class Visualization:
             num_graph_cache_files = min(len(cache.graph_cache_files), n)
             with ThreadPoolExecutor(max_workers=2 * async_workers) as thread_executor:
                 thread_futures = {
-                    thread_executor.submit(func, i, *args, **kwargs): i
+                    thread_executor.submit(func, i, async_mode, *args, **kwargs): i
                     for i in range(num_graph_cache_files)
                 }
                 if len(thread_futures) > 0:
@@ -139,7 +158,7 @@ class Visualization:
             with ProcessPoolExecutor(max_workers=async_workers) as process_exector:
                 # Process the remaining frames
                 process_futures = {
-                    process_exector.submit(func, i, *args, **kwargs): i
+                    process_exector.submit(func, i, async_mode, *args, **kwargs): i
                     for i in range(num_graph_cache_files, n)
                 }
                 if len(process_futures) > 0:
@@ -154,7 +173,7 @@ class Visualization:
                     f"Processing {abs(num_graph_cache_files - n)} frames synchronously..."
                 )
             for i in range(num_graph_cache_files, n):
-                collection[i], took[i] = func(i, *args, **kwargs)
+                collection[i], took[i] = func(i, async_mode, *args, **kwargs)
                 print(f"Processed frame {i+1}/{n} in {took[i]:.2f} seconds")
         avg_took = sum(took) / len(took)
         return collection, avg_took
@@ -216,8 +235,8 @@ class Visualization:
         """Display the visualization on the screen"""
 
         i = 0
-        processed_frame, _ = self.process_frame(i)
-        if isinstance(processed_frame, plt.Axes):
+        processed_frame, _ = self.process_frame(i, "off")
+        if isinstance(processed_frame, plt.Figure):
             plt.show()
         elif isinstance(processed_frame, np.ndarray):
             plt.imshow(processed_frame)

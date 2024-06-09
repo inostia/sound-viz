@@ -112,6 +112,14 @@ class Audio:
         # TODO: handle the case where the BPM changes and find the BPM for each time frame
         return tempo[0]
 
+    def total_beats_in_measures(self, measures: int) -> float:
+        """Get the number of beats in n measures.
+        
+        Args:
+            measures (int): The number of measures"""
+        beats, unit = self.parse_time_signature()
+        return measures * beats * (4 / unit)
+
     def parse_time_signature(self):
         """Parse the time signature"""
         if not self.time_signature:
