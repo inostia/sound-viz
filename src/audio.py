@@ -23,6 +23,8 @@ class Audio:
     def __init__(self, filename, bpm=None, time_signature="4/4", fps=30):
         self.filename = filename
         self.time_series, self.sample_rate = librosa.load(filename)
+        # Apply pre-emphasis to the audio signal
+        self.time_series = librosa.effects.preemphasis(self.time_series)
         self.hop_length = int(self.sample_rate / fps)
         self.stft = np.abs(
             librosa.stft(self.time_series, hop_length=self.hop_length, n_fft=2048 * 4)
