@@ -98,6 +98,8 @@ class Visualization:
                 graph = cv2.cvtColor(blended, cv2.COLOR_RGB2BGR)
             cv2.imwrite(image_filename, graph)
             return image_filename
+        if isinstance(graph, str) and graph == image_filename:
+            return image_filename
         else:
             raise TypeError("Input must be a matplotlib Axes object or a numpy array.")
 
@@ -138,11 +140,11 @@ class Visualization:
         took = [0] * n
         if self.use_cache:
             # Assume the cache files are in order and complete
-            num_graph_cache_files = min(len(cache.graph_cache_files), n)
+            num_img_cache_files = min(len(cache.img_cache_files), n)
             with ThreadPoolExecutor(max_workers=2 * async_workers) as thread_executor:
                 thread_futures = {
-                    thread_executor.submit(func, i, async_mode, *args, **kwargs): i
-                    for i in range(num_graph_cache_files)
+                    thread_executor.submit(func, i, "on", *args, **kwargs): i
+                    for i in range(num_img_cache_files)
                 }
                 if len(thread_futures) > 0:
                     print(f"Processing {len(thread_futures)} cache files...")
@@ -150,16 +152,16 @@ class Visualization:
                     i = thread_futures[future]
                     collection[i], took[i] = future.result()
                     print(
-                        f"Processed frame {i+1}/{n} from graph cache in {took[i]:.2f} seconds"
+                        f"Processed frame {i+1}/{n} from cache in {took[i]:.2f} seconds"
                     )
         else:
-            num_graph_cache_files = 0
+            num_img_cache_files = 0
         if async_mode == "on":
             with ProcessPoolExecutor(max_workers=async_workers) as process_exector:
                 # Process the remaining frames
                 process_futures = {
                     process_exector.submit(func, i, async_mode, *args, **kwargs): i
-                    for i in range(num_graph_cache_files, n)
+                    for i in range(num_img_cache_files, n)
                 }
                 if len(process_futures) > 0:
                     print(f"Processing {len(process_futures)} frames asynchronously...")
@@ -168,11 +170,11 @@ class Visualization:
                     collection[i], took[i] = future.result()
                     print(f"Processed frame {i+1}/{n} in {took[i]:.2f} seconds")
         else:
-            if not self.use_cache or n - num_graph_cache_files > 0:
+            if not self.use_cache or n - num_img_cache_files > 0:
                 print(
-                    f"Processing {abs(num_graph_cache_files - n)} frames synchronously..."
+                    f"Processing {abs(num_img_cache_files - n)} frames synchronously..."
                 )
-            for i in range(num_graph_cache_files, n):
+            for i in range(num_img_cache_files, n):
                 collection[i], took[i] = func(i, async_mode, *args, **kwargs)
                 print(f"Processed frame {i+1}/{n} in {took[i]:.2f} seconds")
         avg_took = sum(took) / len(took)
@@ -231,13 +233,13 @@ class Visualization:
         subprocess.run(command, check=True)
         return video_filename, output_filename, avg_took
 
-    def display_screen(self):
+    def display_screen(self, time_position: int = 0):
         """Display the visualization on the screen"""
 
-        i = 0
-        processed_frame, _ = self.process_frame(i, "off")
+        processed_frame, _ = self.process_frame(time_position, "off")
         if isinstance(processed_frame, plt.Figure):
-            plt.show()
+            plt.figure(processed_frame.number)  # make the figure with this number current
+            plt.show()  # display the current figure
         elif isinstance(processed_frame, np.ndarray):
             plt.imshow(processed_frame)
             plt.show()

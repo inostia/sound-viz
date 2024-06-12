@@ -75,6 +75,13 @@ if __name__ == "__main__":
         help="The maximum number of workers to use for async mode.",
         default=8,
     )
+    
+    parser.add_argument(
+        "--time-position",
+        type=int,
+        help="The time position to render in screen mode.",
+        default=0,
+    )
 
     parser.add_argument(
         "--graph",
@@ -115,7 +122,7 @@ if __name__ == "__main__":
             f"open {viz_output}", shell=True
         )
     elif args.mode == "screen":
-        viz.display_screen()
+        viz.display_screen(time_position=args.time_position)
     else:
         print("Invalid mode.")
         exit()

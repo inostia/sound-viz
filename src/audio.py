@@ -24,14 +24,14 @@ class Audio:
         self.filename = filename
         self.time_series, self.sample_rate = librosa.load(filename)
         # Apply pre-emphasis to the audio signal
-        self.time_series = librosa.effects.preemphasis(self.time_series)
+        self.time_series = librosa.effects.preemphasis(self.time_series, coef=0.66)
         self.hop_length = int(self.sample_rate / fps)
         self.stft = np.abs(
             librosa.stft(self.time_series, hop_length=self.hop_length, n_fft=2048 * 4)
         )
         self.spectrogram = librosa.amplitude_to_db(self.stft, ref=np.max)
         # getting an array of frequencies
-        self.frequencies = librosa.core.fft_frequencies(n_fft=2048 * 4)
+        self.frequencies = librosa.core.fft_frequencies(sr=self.sample_rate, n_fft=2048 * 4)
         # getting an array of time periodic
         self.times = librosa.core.frames_to_time(
             np.arange(self.spectrogram.shape[1]),
