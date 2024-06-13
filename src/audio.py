@@ -2,6 +2,7 @@ import librosa
 import numpy as np
 import scipy.ndimage.filters
 from matplotlib import pyplot as plt
+from scipy.signal import butter, lfilter
 
 CACHE_DIR = "cache/"
 
@@ -31,7 +32,9 @@ class Audio:
         )
         self.spectrogram = librosa.amplitude_to_db(self.stft, ref=np.max)
         # getting an array of frequencies
-        self.frequencies = librosa.core.fft_frequencies(sr=self.sample_rate, n_fft=2048 * 4)
+        self.frequencies = librosa.core.fft_frequencies(
+            sr=self.sample_rate, n_fft=2048 * 4
+        )
         # getting an array of time periodic
         self.times = librosa.core.frames_to_time(
             np.arange(self.spectrogram.shape[1]),
@@ -116,7 +119,7 @@ class Audio:
 
     def total_beats_in_measures(self, measures: int) -> float:
         """Get the number of beats in n measures.
-        
+
         Args:
             measures (int): The number of measures"""
         beats, unit = self.parse_time_signature()
@@ -135,14 +138,68 @@ class Audio:
             beats = int(time_signature[0])
             unit = int(time_signature[1])
         except ValueError:
-            raise ValueError(f"Time signature must be two integers separated by a slash: {self.time_signature}")
+            raise ValueError(
+                f"Time signature must be two integers separated by a slash: {self.time_signature}"
+            )
 
         if beats <= 0 or unit not in [1, 2, 4, 8, 16, 32, 64]:
             raise ValueError(f"Invalid time signature: {self.time_signature}")
 
         return beats, unit
-    
+
     def get_beat(self, target_time: int, fps: int) -> float:
         """Get the beat at a given time"""
         t = target_time / fps
         return self.bpm * t / 60
+
+    def make_filter(self, cutoff: int, order: int = 5, btype: str = "low"):
+        """Create a Butterworth filter
+
+        Args:
+            cutoff (int): The cutoff frequency
+            order (int): The order of the filter. Defaults to 5.
+            btype (str): The type of filter. Either "low" or "high". Defaults to "low".
+
+        Returns:
+            tuple: The filter coefficients"""
+        if btype not in ["low", "high"]:
+            raise ValueError("btype must be either 'low' or 'high'")
+        nyquist = 0.5 * self.sample_rate
+        if cutoff >= nyquist:
+            raise ValueError("Cutoff frequency must be less than the Nyquist frequency")
+        normal_cutoff = cutoff / nyquist
+        return butter(order, normal_cutoff, btype=btype, analog=False)
+
+    def highpass_filter(
+        self, cutoff: int, order: int = 5, time_series: np.ndarray = None
+    ):
+        """Apply a highpass filter to the audio signal
+
+        Args:
+            cutoff (int): The cutoff frequency
+            order (int): The order of the filter. Defaults to 5."""
+        b, a = self.make_filter(cutoff, order, btype="high")
+        time_series = self.time_series if time_series is None else time_series
+        time_series = lfilter(b, a, time_series)
+        stft = np.abs(
+            librosa.stft(time_series, hop_length=self.hop_length, n_fft=2048 * 4)
+        )
+        spectrogram = librosa.amplitude_to_db(stft, ref=np.max)
+        return spectrogram, time_series
+
+    def lowpass_filter(
+        self, cutoff: int, order: int = 5, time_series: np.ndarray = None
+    ):
+        """Apply a lowpass filter to the audio signal
+
+        Args:
+            cutoff (int): The cutoff frequency
+            order (int): The order of the filter. Defaults to 5."""
+        b, a = self.make_filter(cutoff, order, btype="low")
+        time_series = self.time_series if time_series is None else time_series
+        time_series = lfilter(b, a, time_series)
+        stft = np.abs(
+            librosa.stft(time_series, hop_length=self.hop_length, n_fft=2048 * 4)
+        )
+        spectrogram = librosa.amplitude_to_db(stft, ref=np.max)
+        return spectrogram, time_series

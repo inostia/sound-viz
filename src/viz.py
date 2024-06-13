@@ -103,7 +103,9 @@ class Visualization:
         else:
             raise TypeError("Input must be a matplotlib Axes object or a numpy array.")
 
-    def process_frame(self, time_position: int, async_mode: str, save: bool = False, *args, **kwargs) -> str:
+    def process_frame(
+        self, time_position: int, async_mode: str, save: bool = False, *args, **kwargs
+    ) -> str:
         """Process a single frame of the visualization."""
         start_time = time.time()
         audio = Audio(self.filename, self.bpm, self.time_signature, self.fps)
@@ -238,7 +240,9 @@ class Visualization:
 
         processed_frame, _ = self.process_frame(time_position, "off")
         if isinstance(processed_frame, plt.Figure):
-            plt.figure(processed_frame.number)  # make the figure with this number current
+            plt.figure(
+                processed_frame.number
+            )  # make the figure with this number current
             plt.show()  # display the current figure
         elif isinstance(processed_frame, np.ndarray):
             plt.imshow(processed_frame)

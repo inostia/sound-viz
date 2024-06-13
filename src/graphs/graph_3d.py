@@ -1,4 +1,3 @@
-import librosa
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -28,10 +27,7 @@ class Graph3D(BaseGraph):
     ) -> plt.Axes:
         """Draw a geometric shape to the audio visualization."""
         # TODO: Fix the cache
-        if (
-            self.use_cache
-            and (cached_img := cache.get_img_cache_item(time_position))
-        ):
+        if self.use_cache and (cached_img := cache.get_img_cache_item(time_position)):
             return cached_img
 
         fig, ax = self.create_figure(time_position, async_mode)
@@ -42,7 +38,7 @@ class Graph3D(BaseGraph):
         directions = np.random.rand(10, 3) - 0.5
 
         # Get the spectrum data for the current time position
-        spectrum_data = self.get_spectrum(time_position, audio)
+        spectrum_data = self.get_sphere_spectrum(time_position, audio)
         points = self.fibonacci_sphere(len(spectrum_data))
 
         # Separate into bands - define the number of frequency bands and the size of the gaps between them
@@ -57,8 +53,8 @@ class Graph3D(BaseGraph):
         band_index = 0
 
         # Get the brightness of the points based on the mean amplitude
-        # brightness = self.get_brightness(time_position, audio)
-        brightness = 1
+        brightness = self.get_brightness(time_position, audio)
+        # brightness = 1
 
         # Iterate over the points
         for point in points:
@@ -203,67 +199,60 @@ class Graph3D(BaseGraph):
         ax.view_init(elev=elev_angle, azim=azim_angle)
 
         return fig, ax
-    
+
     def get_brightness(self, time_position: int, audio: Audio) -> float:
         """Calculate the brightness of a point based on the amplitude."""
+
+        # TODO: Calculate a gradient of brightness per frequency band
+
         def sigmoid(x):
+            """Logistic sigmoid function."""
             return 1 / (1 + np.exp(-x))
-        
-        # Get the mean amplitude of the spectrogram only for the high frequencies
-        # high_freq = 10000
-        high_freq = 10000
-        high_freq_index = audio.get_frequency_index(high_freq)
-    
-        # Get the spectrum data for the current time position
-        spectrum_data = audio.get_spectrogram_slice(time_position)
-        spectrum_data = spectrum_data[high_freq_index:]
 
-        # Get the mean amplitude of the high frequencies
-        high_freq_amplitude = np.mean(spectrum_data)
+        # Create a bandpass filter to isolate the mid frequencies
+        low_cutoff, high_cutoff = 500, 2800
+        spectrogram, time_series = audio.highpass_filter(low_cutoff, order=7)
+        spectrogram, _ = audio.lowpass_filter(
+            high_cutoff, order=10, time_series=time_series
+        )
+        mean_amplitudes = np.mean(spectrogram, axis=0)
+        high_freq_amplitude = mean_amplitudes[time_position]
 
-        # Get the mean amplitude of all the high frequencies in the audio
-        # spectrogram_amplitudes = [np.mean(spect[high_freq_index:]) for spect in audio.spectrogram]
-        mean_amplitudes = []
-        for spect in audio.spectrogram:
-            if len(spect) > high_freq_index:
-                mean_amplitudes.append(np.mean(spect[high_freq_index:]))
-        mean_amplitudes = np.array(mean_amplitudes)
         # Normalize the amplitude
-        brightness_min = 0.5
-        brightness_max = 1
+        brightness_min = 0.25
+        brightness_max = 1.0
         high_freq_amplitude = np.interp(
             high_freq_amplitude,
             [np.min(mean_amplitudes), np.max(mean_amplitudes)],
             [brightness_min, brightness_max],
         )
 
-        # Apply the sigmoid function to exaggerate the differences
-        high_freq_amplitude = sigmoid(high_freq_amplitude)
+        high_freq_amplitude = sigmoid(high_freq_amplitude * 10 - 5)
 
         return high_freq_amplitude
 
+        # Create a square wave
+        # Assuming self.fps is defined and holds the frames per second value
+        # cycles_per_second = 200  # Adjust this value to change the frequency of the square wave
+        # square_wave = scipy.signal.square(2 * np.pi * cycles_per_second * time_position / self.fps)
 
+        # # Apply the square wave to the brightness
+        # glitchy_brightness = high_freq_amplitude * square_wave
 
+        # return glitchy_brightness
 
-    def get_spectrum(self, time_position: int, audio: Audio) -> np.ndarray:
+    def get_sphere_spectrum(self, time_position: int, audio: Audio) -> np.ndarray:
         """Process the spectrum data."""
-
         # TODO: Process in stereo and split the spectrum data into left and right channels
-        spectrum_data = audio.get_spectrogram_slice(time_position)
 
-        # Subtract the mean from the spectrum data
-        # spectrum_data = spectrum_data - np.mean(spectrum_data)
-        # # Divide by the standard deviation
-        # spectrum_data = spectrum_data / np.std(spectrum_data)
-        # Apply the sigmoid function to exaggerate the differences
-        # spectrum_data = sigmoid(spectrum_data)
-
-        # Apply a non-linear transformation to exaggerate the differences
-        # spectrum_data = np.sign(spectrum_data) * np.power(spectrum_data, 2)
+        # Low-pass filter the audio to remove high frequencies
+        high_cutoff = 10000
+        spectrogram, _ = audio.lowpass_filter(high_cutoff, order=3)
+        spectrum_data = spectrogram[:, time_position]
 
         return np.interp(
             spectrum_data,
-            [np.min(audio.spectrogram), np.max(audio.spectrogram)],
+            [np.min(spectrogram), np.max(spectrogram)],
             [0, 1],
         )
 
@@ -290,4 +279,3 @@ class Graph3D(BaseGraph):
         r = np.sqrt(x**2 + y**2 + z**2)
         theta = np.arctan2(np.sqrt(x**2 + y**2), z)  # Inclination angle
         phi = np.arctan2(y, x)  # Azimuthal angle
-        return r, theta, phi

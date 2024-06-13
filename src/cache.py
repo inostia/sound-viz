@@ -1,5 +1,6 @@
 import os
 import pickle
+import re
 import shutil
 from typing import Type
 
@@ -69,9 +70,13 @@ class VizCache:
         d = [
             f"{self.img_cache_dir}{f}" for f in os.listdir(self.img_cache_dir)
         ]
-        self.img_cache_files = sorted(
-            d, key=lambda x: int(os.path.splitext(os.path.basename(x))[0])
+        regex_filter = re.compile(r"^(\d+)(\.\w+)?$")
+        # Filter and sort by integer value of filename
+        d = sorted(
+            filter(lambda x: regex_filter.match(os.path.basename(x)), d),
+            key=lambda x: int(os.path.splitext(os.path.basename(x))[0]),
         )
+        self.img_cache_files = d
 
     # Public methods
     def clear_cache(self):
