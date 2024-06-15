@@ -1,3 +1,5 @@
+import math
+
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -43,7 +45,8 @@ class Graph3D(BaseGraph):
 
         # Separate into bands - define the number of frequency bands and the size of the gaps between them
         num_bands = 60
-        gap_size = 5
+        # gap_size = 5
+        gap_size = 0
         band_sizes, band_indices = self.get_band_sizes(
             spectrum_data, num_bands, gap_size
         )
@@ -58,18 +61,6 @@ class Graph3D(BaseGraph):
 
         # Iterate over the points
         for point in points:
-            """TODO: Instead of straight scaling by the amplitude, do something more akin to physics,
-            like a spring system or a wave system. For example, the amplitude could be the amount of
-            displacement from the equilibrium position. We could calculate the velocity of the point
-            and the acceleration of the point based on the amplitude and the previous amplitudes.
-            Then we could shoot the point in the direction of the acceleration and dampen the velocity
-            based on the velocity and the amplitude."""
-            """TODO: Alternatively, draw a wave in the animation every time
-            this method is called, and the wave could be a function of the amplitude."""
-            """TODO: Redistribute the points in clusters across the sphere to make the visualization more interesting"""
-            """TODO: Some points should shoot outwards if the force is strong enough"""
-            """TODO: Imprint the word "Xenotech" on the sphere as a cutout of the amplitude"""
-
             # Increment the total size
             total_size += 1
 
@@ -95,6 +86,28 @@ class Graph3D(BaseGraph):
             # Use the normalized amplitude to adjust the radius
             adjusted_r = min_r * (1 + amplitude)
             adjusted_r = np.clip(adjusted_r, min_r, self.size)
+
+            # TODO: Interpolate the points to create a smooth transition between shapes
+            # alongside the rotation - e.g. a morphing effect from a sphere to a wave
+            # TODO: Add a factor for transforming the shape by incorporating the new radius
+            shape = "wave"
+            # shape = "spiral"
+            if shape == "wave":
+                # Adjust the radius based on the absolute value of a sine wave to create a wave-like pattern in the band
+                adjusted_r *= 1 + 0.1 * abs(math.sin(total_size / band_sizes[band_index] * 2 * math.pi))
+            if shape == "shell":
+                # The radius of each band is proportional to its index
+                adjusted_r *= 1 + 0.1 * band_index
+            elif shape == "spiral":
+                # The position of each point is adjusted based on a spiral function
+                theta = total_size / band_sizes[band_index] * 2 * math.pi
+                normalized_r = adjusted_r / self.size * 2  # Normalize the radius
+                point[0] = normalized_r * math.cos(theta)
+                point[1] = normalized_r * math.sin(theta)
+                point[2] += (
+                    total_size / band_sizes[band_index] * 0.1
+                )  # Adjust the z-coordinate to create a spiral in 3D
+
             point = point * adjusted_r
             X.append(point[0])
             Y.append(point[1])
@@ -111,6 +124,7 @@ class Graph3D(BaseGraph):
                 length=0.2,
                 color=(0, brightness, 0),  # Bright green
             )
+
         ax.axis("off")
         # TODO: Fix the cache
         # cache.save_graph_cache_item(time_position, fig)
@@ -219,7 +233,7 @@ class Graph3D(BaseGraph):
         high_freq_amplitude = mean_amplitudes[time_position]
 
         # Normalize the amplitude
-        brightness_min = 0.25
+        brightness_min = 0.0
         brightness_max = 1.0
         high_freq_amplitude = np.interp(
             high_freq_amplitude,
@@ -230,16 +244,6 @@ class Graph3D(BaseGraph):
         high_freq_amplitude = sigmoid(high_freq_amplitude * 10 - 5)
 
         return high_freq_amplitude
-
-        # Create a square wave
-        # Assuming self.fps is defined and holds the frames per second value
-        # cycles_per_second = 200  # Adjust this value to change the frequency of the square wave
-        # square_wave = scipy.signal.square(2 * np.pi * cycles_per_second * time_position / self.fps)
-
-        # # Apply the square wave to the brightness
-        # glitchy_brightness = high_freq_amplitude * square_wave
-
-        # return glitchy_brightness
 
     def get_sphere_spectrum(self, time_position: int, audio: Audio) -> np.ndarray:
         """Process the spectrum data."""
@@ -275,7 +279,8 @@ class Graph3D(BaseGraph):
 
         return np.array(points)
 
-    def cartesian_to_spherical(x, y, z):
+    def cartesian_to_spherical(self, x, y, z):
         r = np.sqrt(x**2 + y**2 + z**2)
         theta = np.arctan2(np.sqrt(x**2 + y**2), z)  # Inclination angle
         phi = np.arctan2(y, x)  # Azimuthal angle
+        return r, theta, phi
