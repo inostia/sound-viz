@@ -3,6 +3,7 @@ import os
 import subprocess
 import time
 
+from src.utils import parse_graph_class
 from src.viz import Visualization
 
 if __name__ == "__main__":
@@ -78,9 +79,9 @@ if __name__ == "__main__":
     
     parser.add_argument(
         "--time-position",
-        type=int,
-        help="The time position to render in screen mode.",
-        default=0,
+        type=str,
+        help="The time position to render in screen mode. Either an integer or a slice (e.g. 0:10).",
+        default=None,
     )
 
     parser.add_argument(
@@ -99,11 +100,7 @@ if __name__ == "__main__":
 
     start_time = time.time()
 
-    # Load up the graph from the module string
-    graph_module, graph_class = args.graph.rsplit(".", 1)
-    graph_module = __import__(graph_module, fromlist=[graph_class])
-    graph_class = getattr(graph_module, graph_class)
-
+    graph_class = parse_graph_class(args.graph)
     viz = Visualization(
         filename=args.filename,
         size=args.size,
@@ -114,6 +111,8 @@ if __name__ == "__main__":
         clear_cache=args.clear_cache,
         time_signature=args.time_signature,
     )
+    if args.time_position == "off":
+        args.time_position = None
     if args.mode == "video":
         viz_video, viz_output, avg_took = viz.create_video(args.async_mode, args.async_workers)
         print(f"Output video saved to: {viz_output}")

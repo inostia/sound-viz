@@ -6,7 +6,7 @@ import numpy as np
 
 from src.audio import Audio
 from src.cache import VizCache
-from src.viz import init_plt
+from src.viz import DPI, init_plt
 
 from .base import BaseGraph
 
@@ -35,6 +35,7 @@ class Graph3D(BaseGraph):
         fig, ax = self.create_figure(time_position, async_mode)
         X, Y, Z = [], [], []
         min_r = self.size / 2
+        max_r = min_r * 1.5
 
         # Create some random directions for the arrows
         directions = np.random.rand(10, 3) - 0.5
@@ -44,7 +45,7 @@ class Graph3D(BaseGraph):
         points = self.fibonacci_sphere(len(spectrum_data))
 
         # Separate into bands - define the number of frequency bands and the size of the gaps between them
-        num_bands = 60
+        num_bands = 9
         # gap_size = 5
         gap_size = 0
         band_sizes, band_indices = self.get_band_sizes(
@@ -57,7 +58,6 @@ class Graph3D(BaseGraph):
 
         # Get the brightness of the points based on the mean amplitude
         brightness = self.get_brightness(time_position, audio)
-        # brightness = 1
 
         # Iterate over the points
         for point in points:
@@ -73,6 +73,11 @@ class Graph3D(BaseGraph):
             if total_size <= gap_size:
                 continue
 
+            # Delete any points in the last band
+            if band_index >= num_bands - 1:
+                continue
+
+
             # Get the start and end indices for the current band
             start_index, end_index = band_indices[band_index]
 
@@ -80,18 +85,35 @@ class Graph3D(BaseGraph):
             band_spectrum_data = spectrum_data[start_index:end_index]
 
             # Calculate the amplitude for the current band
-            amplitude_scale = 1
+            amplitude_scale = 1.2
             amplitude = np.mean(band_spectrum_data) * amplitude_scale
 
             # Use the normalized amplitude to adjust the radius
             adjusted_r = min_r * (1 + amplitude)
-            adjusted_r = np.clip(adjusted_r, min_r, self.size)
+            adjusted_r = np.clip(adjusted_r, min_r, max_r)
 
             # TODO: Interpolate the points to create a smooth transition between shapes
             # alongside the rotation - e.g. a morphing effect from a sphere to a wave
             # TODO: Add a factor for transforming the shape by incorporating the new radius
-            shape = "wave"
-            # shape = "spiral"
+            shape = "sphere"
+            if shape == "sphere":
+                # TODO: Fix the centering of the sphere in the screen when there's a displacement
+                # Reduce the point by a factor of the band index to create a 3D effect
+                adjusted_r *= 1 - 0.07 * band_index
+                # Add some displacement to the points to create a 3D effect
+                displacement_constant = band_index ** np.cbrt(band_index) * 0.33
+                # displacement_constant = 0.1 * band_index
+                # Calculate the displacement based on the amplitude
+                mid_point = num_bands // 2
+                if band_index < mid_point:
+                    displacement_factor = -0.1
+                    displacement_y = amplitude * displacement_factor * displacement_constant
+                    point += [0, displacement_y, 0]
+                else:
+                    displacement_factor = 0.1
+                    displacement_y = amplitude * displacement_factor * displacement_constant
+                    point -= [0, displacement_y, 0]
+                # TODO: Make sure the bands are always progressively higher
             if shape == "wave":
                 # Adjust the radius based on the absolute value of a sine wave to create a wave-like pattern in the band
                 adjusted_r *= 1 + 0.1 * abs(math.sin(total_size / band_sizes[band_index] * 2 * math.pi))
@@ -108,6 +130,7 @@ class Graph3D(BaseGraph):
                     total_size / band_sizes[band_index] * 0.1
                 )  # Adjust the z-coordinate to create a spiral in 3D
 
+            # Adjust the position of the point
             point = point * adjusted_r
             X.append(point[0])
             Y.append(point[1])
@@ -138,18 +161,14 @@ class Graph3D(BaseGraph):
         # Calculate the total size available for the bands
         total_size = len(spectrum_data) - gap_size * (num_bands - 1)
 
-        # Calculate the sum of the series 1, 1/cbrt(2), 1/cbrt(3), ..., 1/cbrt(num_bands)
-        # series_sum = sum(1 / np.cbrt(i) for i in range(1, num_bands + 1))
-        # Harmonic series
-        series_sum = sum(1 / i for i in range(1, num_bands + 1))
+        # Harmonic series 
+        series_sum = sum([1 / i for i in range(1, num_bands + 1)])
 
         # Calculate the size of the first band
-        first_band_size = total_size / series_sum
+        first_band_size = (total_size / series_sum)
 
         # Calculate the size of each band
-        band_sizes = [
-            round(first_band_size / np.cbrt(i)) for i in range(1, num_bands + 1)
-        ]
+        band_sizes = [int(first_band_size / i) for i in range(1, num_bands + 1)]
 
         # Calculate the start and end indices of each band
         band_indices = []
@@ -163,7 +182,7 @@ class Graph3D(BaseGraph):
 
     def get_rotation(self, time_position: int):
         """Get the rotation angles for the 3D plot. The angles are determined by sine waves that oscillate over time."""
-        seconds_per_rotation = 50  # Decrease for a faster rotation
+        seconds_per_rotation = 45  # Decrease for a faster rotation
         frames_per_rotation = seconds_per_rotation * self.fps
         elev_wave = np.sin(np.linspace(0, 2 * np.pi, frames_per_rotation))
         azim_wave = np.sin(np.linspace(0, 4 * np.pi, frames_per_rotation))
@@ -175,7 +194,11 @@ class Graph3D(BaseGraph):
         # Apply a low-frequency oscillator (LFO) to the rotation angles. The LFO is a sine wave that completes a half
         # cycle over the period of frames_per_rotation. This results in a slow oscillation of the rotation angles,
         # creating a more dynamic visual effect.
-        lfo = np.sin(np.linspace(0, np.pi, frames_per_rotation))
+        lfo_frequency = 0.5  # The frequency of the LFO in Hz
+        # Modify lfo_frequency to adjust the speed of the oscillation by a factor of -1 to 1 based on the band index mod
+        lfo = np.sin(
+            np.linspace(0, 2 * np.pi, frames_per_rotation) * lfo_frequency
+        )
         slow_factor = lfo[time_position % len(lfo)]
         elev_angle *= slow_factor
         azim_angle *= slow_factor
@@ -194,12 +217,11 @@ class Graph3D(BaseGraph):
             import matplotlib.pyplot as plt
         init_plt(plt)
         # Create a 3D plot
-        dpi = 100  # dots per inch
-        # width = self.size / dpi  # calculate weight in inches
-        # height = self.size / dpi * 5 / 4  # calculate height in inches
+        width = self.size / DPI
+        height = self.size / DPI
 
         # fig = plt.figure(figsize=(width, height))
-        fig = plt.figure(figsize=(self.size / dpi, self.size / dpi))
+        fig = plt.figure(figsize=(width, height), dpi=DPI)
         ax = fig.add_axes([0, 0, 1, 1], projection="3d")
         ax.set_xmargin(0)
         ax.set_ymargin(0)
@@ -224,10 +246,10 @@ class Graph3D(BaseGraph):
             return 1 / (1 + np.exp(-x))
 
         # Create a bandpass filter to isolate the mid frequencies
-        low_cutoff, high_cutoff = 500, 2800
-        spectrogram, time_series = audio.highpass_filter(low_cutoff, order=7)
+        low_cutoff, high_cutoff = 500, 1500
+        spectrogram, time_series = audio.highpass_filter(low_cutoff, order=9)
         spectrogram, _ = audio.lowpass_filter(
-            high_cutoff, order=10, time_series=time_series
+            high_cutoff, order=4, time_series=time_series
         )
         mean_amplitudes = np.mean(spectrogram, axis=0)
         high_freq_amplitude = mean_amplitudes[time_position]
@@ -249,14 +271,9 @@ class Graph3D(BaseGraph):
         """Process the spectrum data."""
         # TODO: Process in stereo and split the spectrum data into left and right channels
 
-        # Low-pass filter the audio to remove high frequencies
-        high_cutoff = 10000
-        spectrogram, _ = audio.lowpass_filter(high_cutoff, order=3)
-        spectrum_data = spectrogram[:, time_position]
-
         return np.interp(
-            spectrum_data,
-            [np.min(spectrogram), np.max(spectrogram)],
+            audio.get_spectrogram_slice(time_position),
+            [np.min(audio.spectrogram), np.max(audio.spectrogram)],
             [0, 1],
         )
 

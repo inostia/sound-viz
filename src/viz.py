@@ -13,6 +13,8 @@ from src.cache import VizCache
 from src.graphs.base import BaseGraph
 from src.utils import generate_unique_filename
 
+DPI = 100
+
 
 def init_plt(plt):
     plt.rcParams["figure.facecolor"] = "black"
@@ -68,7 +70,7 @@ class Visualization:
         image_filename = f"{cache.img_cache_dir}{time_position}.png"
 
         if isinstance(graph, plt.Figure):
-            graph.savefig(image_filename, dpi=300, facecolor="black")
+            graph.savefig(image_filename, dpi=DPI, facecolor="black")
             plt.close(graph)
             return image_filename
         if isinstance(graph, np.ndarray):
@@ -109,7 +111,7 @@ class Visualization:
         """Process a single frame of the visualization."""
         start_time = time.time()
         audio = Audio(self.filename, self.bpm, self.time_signature, self.fps)
-        cache = VizCache(self.filename, len(audio.times), self.graph_class)
+        cache = VizCache(self.filename, self.graph_class)
         graph = self.graph_class(self.size, self.fps, self.use_cache).draw(
             time_position, async_mode, audio, cache, *args, **kwargs
         )
@@ -130,7 +132,7 @@ class Visualization:
         """Iterate over each time frame and pass the spectrogram slice to the given function"""
         audio = Audio(self.filename, self.bpm, self.time_signature, self.fps)
         n = len(audio.times)
-        cache = VizCache(self.filename, n, self.graph_class)
+        cache = VizCache(self.filename, self.graph_class)
         if self.clear_cache == "all":
             cache.clear_cache()
         elif self.clear_cache == "graph":
@@ -184,7 +186,8 @@ class Visualization:
 
     def create_video(self, async_mode: str = "off", async_workers: int = 4) -> tuple:
         """Create a video from the images generated for each time frame and add the original audio."""
-        # Gen_file and save an image for each time frame
+
+        # Gen_file and save an image for each time frame - eg 0.png, 1.png, 2.png, ...
         image_files, avg_took = self.process_time_frames(
             self.process_frame, async_mode, async_workers, save=True
         )
@@ -235,10 +238,12 @@ class Visualization:
         subprocess.run(command, check=True)
         return video_filename, output_filename, avg_took
 
-    def display_screen(self, time_position: int = 0):
+    def display_screen(self, time_position: str | None = "0"):
         """Display the visualization on the screen"""
 
-        processed_frame, _ = self.process_frame(time_position, "off")
+        if time_position is None:
+            time_position = 0
+        processed_frame, _ = self.process_frame(int(time_position), "off")
         if isinstance(processed_frame, plt.Figure):
             plt.figure(
                 processed_frame.number

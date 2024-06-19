@@ -18,17 +18,15 @@ class VizCache:
     """File-based cache class to store the a cache used for the visualization of audio data"""
 
     filename: str = ""
-    length: int = 0
     cache_dir: str = ""
     graph_cache_dir: str = ""
     graph_cache_files: list = []
     img_cache_dir: str = ""
     img_cache_files: list = []
 
-    def __init__(self, filename: str, length: int, graph_class: Type[BaseGraph]):
-        """Initialize the cache for a given audio file and length."""
+    def __init__(self, filename: str, graph_class: Type[BaseGraph]):
+        """Initialize the cache for a given audio file."""
         self.filename = filename
-        self.length = length
         # Convert the graph_class into a string to use as a subdirectory in the cache directory
         self.cache_dir = f"{CACHE_DIR}{graph_class.__name__}/"
         self.cache_dir = (

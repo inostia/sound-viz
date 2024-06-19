@@ -1,5 +1,8 @@
 import hashlib
 import os
+from typing import Type
+
+from src.graphs.base import BaseGraph
 
 
 def generate_unique_filename(filename) -> str:
@@ -15,3 +18,11 @@ def generate_unique_filename(filename) -> str:
         basename, ext = os.path.splitext(filename)
         return f"{basename}_{hash.hexdigest()[:5]}{ext}"
     return filename
+
+
+def parse_graph_class(graph: str) -> Type[BaseGraph]:
+    """Load up the graph from the module string"""
+    graph_module, graph_class = graph.rsplit(".", 1)
+    graph_module = __import__(graph_module, fromlist=[graph_class])
+    graph_class = getattr(graph_module, graph_class)
+    return graph_class
