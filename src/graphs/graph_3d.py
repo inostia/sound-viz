@@ -1,5 +1,3 @@
-import math
-
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -35,10 +33,7 @@ class Graph3D(BaseGraph):
         fig, ax = self.create_figure(time_position, async_mode)
         X, Y, Z = [], [], []
         min_r = self.size / 2
-        max_r = min_r * 1.5
-
-        # Create some random directions for the arrows
-        directions = np.random.rand(10, 3) - 0.5
+        max_r = min_r * 2
 
         # Get the spectrum data for the current time position
         spectrum_data = self.get_sphere_spectrum(time_position, audio)
@@ -53,113 +48,71 @@ class Graph3D(BaseGraph):
         )
 
         # Initialize the total size covered so far and the current band index
-        total_size = 0
         band_index = 0
 
         # Get the brightness of the points based on the mean amplitude
-        brightness = self.get_brightness(time_position, audio)
+        sphere_brightness = self.get_brightness(time_position, audio)
 
-        # Calculate the amplitude for each band
-        amplitudes = []
-        for start_index, end_index in band_indices:
-            amplitude = self.get_amplitude(spectrum_data, start_index, end_index)
-            amplitudes.append(amplitude)
+        # Calculate the amplitudes by band
+        band_amplitudes = self.get_amplitudes(spectrum_data, band_indices)
 
-        # Iterate over the points
-        for point in points:
-            # Increment the total size
-            total_size += 1
 
-            # If the total size exceeds the size of the current band, move to the next band
-            if total_size > band_sizes[band_index] + gap_size:
-                band_index += 1
-                total_size = 0
-
-            # If the total size is within the gap size, skip the point
-            if total_size <= gap_size:
-                continue
-
-            # Delete any points in the last band
+        # Use vectorized operations to speed up the calculations iterate over bands
+        for band_index, (start_index, end_index) in enumerate(band_indices):
+            # Skip any points in the last band
             if band_index >= num_bands - 1:
                 continue
 
+            band_amplitude = band_amplitudes[band_index]
 
-            # Get the start and end indices for the current band
-            start_index, end_index = band_indices[band_index]
+            # Calculate the radius of the band
+            band_size = end_index - start_index
+            band_r = min_r + band_size / len(spectrum_data) * (max_r - min_r)
 
-            # amplitude = self.get_amplitude(spectrum_data, start_index, end_index)
-            amplitude = amplitudes[band_index]
-            #  #e the normalized amplitude to adjust the radius
-            adjusted_r = min_r * (1 + amplitude)
+            # Calculate the amplitude of the band
+            amplitude = band_amplitude
+            adjusted_r = band_r * (1 + amplitude)
             adjusted_r = np.clip(adjusted_r, min_r, max_r)
 
-            # TODO: Interpolate the points to create a smooth transition between shapes
-            # alongside the rotation - e.g. a morphing effect from a sphere to a wave
-            # TODO: Add a factor for transforming the shape by incorporating the new radius
-            shape = "sphere"
-            if shape == "sphere":
-                # TODO: Fix the centering of the sphere in the screen when there's a displacement
-                # Reduce the point by a factor of the band index to create a 3D effect
-                adjusted_r *= 1 - 0.07 * band_index
-                # Add some displacement to the points to create a 3D effect
-                displacement_constant = band_index ** np.cbrt(band_index) * 0.33
-                # displacement_constant = 0.1 * band_index
-                # Calculate the displacement based on the amplitude
-                mid_point = num_bands // 2
-                if band_index < mid_point:
-                    displacement_factor = -0.1
-                    displacement_y = amplitude * displacement_factor * displacement_constant
-                    point += [0, displacement_y, 0]
-                else:
-                    displacement_factor = 0.1
-                    displacement_y = amplitude * displacement_factor * displacement_constant
-                    point -= [0, displacement_y, 0]
-                # TODO: Make sure the bands are always progressively higher
-            if shape == "wave":
-                # Adjust the radius based on the absolute value of a sine wave to create a wave-like pattern in the band
-                adjusted_r *= 1 + 0.1 * abs(math.sin(total_size / band_sizes[band_index] * 2 * math.pi))
-            if shape == "shell":
-                # The radius of each band is proportional to its index
-                adjusted_r *= 1 + 0.1 * band_index
-            elif shape == "spiral":
-                # The position of each point is adjusted based on a spiral function
-                theta = total_size / band_sizes[band_index] * 2 * math.pi
-                normalized_r = adjusted_r / self.size * 2  # Normalize the radius
-                point[0] = normalized_r * math.cos(theta)
-                point[1] = normalized_r * math.sin(theta)
-                point[2] += (
-                    total_size / band_sizes[band_index] * 0.1
-                )  # Adjust the z-coordinate to create a spiral in 3D
+            # Reduce the point by a factor of the band index to create a 3D effect
+            adjusted_r *= 1 - 0.07 * band_index
+            # Add some displacement to the points to create a 3D effect
+            displacement_constant = band_index ** np.cbrt(band_index) * 0.33
+            # Calculate the displacement based on the amplitude
+            mid_point = num_bands // 2
+            if band_index < mid_point:
+                displacement_factor = -0.1
+                displacement_y = amplitude * displacement_factor * displacement_constant
+                points[start_index:end_index] += [0, displacement_y, 0]
+            else:
+                displacement_factor = 0.1
+                displacement_y = amplitude * displacement_factor * displacement_constant
+                points[start_index:end_index] -= [0, displacement_y, 0]
 
-            # Adjust the position of the point
-            point = point * adjusted_r
-            X.append(point[0])
-            Y.append(point[1])
-            Z.append(point[2])
+            # Adjust the position of the points
+            points[start_index:end_index] *= adjusted_r
 
-            # Plot the arrows
-            ax.quiver(
-                point[0],
-                point[1],
-                point[2],
-                directions[:, 0],
-                directions[:, 1],
-                directions[:, 2],
-                length=0.2,
-                color=(0, brightness, 0),  # Bright green
-            )
+            # Plot the points
+            X.extend(points[start_index:end_index, 0])
+            Y.extend(points[start_index:end_index, 1])
+            Z.extend(points[start_index:end_index, 2])
 
+        ax.scatter(X, Y, Z, color=(0, sphere_brightness, 0), s=0.1) 
+        
         ax.axis("off")
         # TODO: Fix the cache
         # cache.save_graph_cache_item(time_position, fig)
         return fig
 
-    def get_amplitude(self, spectrum_data: np.ndarray, start_index: int, end_index: int) -> float:
-        """Calculate the amplitude of a band based on the spectrum data."""
-        band_spectrum_data = spectrum_data[start_index:end_index]
-        amplitude_scale = 1.2
-        amplitude = np.mean(band_spectrum_data) * amplitude_scale
-        return amplitude
+    def get_amplitudes(self, spectrum_data: np.ndarray, band_indices: list[tuple[int, int]]) -> list[float]:
+        """Calculate the amplitude of each band based on the spectrum data."""
+        amplitudes = []
+        for start_index, end_index in band_indices:
+            band_spectrum_data = spectrum_data[start_index:end_index]
+            amplitude_scale = 1.2
+            amplitude = np.mean(band_spectrum_data) * amplitude_scale
+            amplitudes.append(amplitude)
+        return amplitudes
 
     def get_band_sizes(
         self, spectrum_data: np.ndarray, num_bands: int, gap_size: int
