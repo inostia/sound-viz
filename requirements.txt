@@ -2,4 +2,6 @@ librosa
 matplotlib
 opencv-python
 pygame
+redis
 scipy
+snakeviz

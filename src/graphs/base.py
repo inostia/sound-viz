@@ -13,11 +13,11 @@ if TYPE_CHECKING:
 class BaseGraph(ABC):
     """Base class for all graph types."""
 
-    size: int = 720
+    size: int = 740
     fps: int = 30
     use_cache: bool = False
 
-    def __init__(self, size: int = 720, fps: int = 30, use_cache: bool = False):
+    def __init__(self, size: int = 740, fps: int = 30, use_cache: bool = False):
         self.size = size
         self.fps = fps
         self.use_cache = use_cache

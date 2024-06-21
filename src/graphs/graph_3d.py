@@ -59,6 +59,12 @@ class Graph3D(BaseGraph):
         # Get the brightness of the points based on the mean amplitude
         brightness = self.get_brightness(time_position, audio)
 
+        # Calculate the amplitude for each band
+        amplitudes = []
+        for start_index, end_index in band_indices:
+            amplitude = self.get_amplitude(spectrum_data, start_index, end_index)
+            amplitudes.append(amplitude)
+
         # Iterate over the points
         for point in points:
             # Increment the total size
@@ -81,14 +87,9 @@ class Graph3D(BaseGraph):
             # Get the start and end indices for the current band
             start_index, end_index = band_indices[band_index]
 
-            # Get the spectrum data for the current band
-            band_spectrum_data = spectrum_data[start_index:end_index]
-
-            # Calculate the amplitude for the current band
-            amplitude_scale = 1.2
-            amplitude = np.mean(band_spectrum_data) * amplitude_scale
-
-            # Use the normalized amplitude to adjust the radius
+            # amplitude = self.get_amplitude(spectrum_data, start_index, end_index)
+            amplitude = amplitudes[band_index]
+            #  #e the normalized amplitude to adjust the radius
             adjusted_r = min_r * (1 + amplitude)
             adjusted_r = np.clip(adjusted_r, min_r, max_r)
 
@@ -152,6 +153,13 @@ class Graph3D(BaseGraph):
         # TODO: Fix the cache
         # cache.save_graph_cache_item(time_position, fig)
         return fig
+
+    def get_amplitude(self, spectrum_data: np.ndarray, start_index: int, end_index: int) -> float:
+        """Calculate the amplitude of a band based on the spectrum data."""
+        band_spectrum_data = spectrum_data[start_index:end_index]
+        amplitude_scale = 1.2
+        amplitude = np.mean(band_spectrum_data) * amplitude_scale
+        return amplitude
 
     def get_band_sizes(
         self, spectrum_data: np.ndarray, num_bands: int, gap_size: int

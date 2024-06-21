@@ -1,3 +1,4 @@
+import cProfile
 import os
 import subprocess
 import time
@@ -110,8 +111,12 @@ class Visualization:
     ) -> str:
         """Process a single frame of the visualization."""
         start_time = time.time()
-        audio = Audio(self.filename, self.bpm, self.time_signature, self.fps)
         cache = VizCache(self.filename, self.graph_class)
+        if audio := cache.get_audio_cache_item():
+            pass
+        else:
+            audio = Audio(self.filename, self.bpm, self.time_signature, self.fps)
+            cache.save_audio_cache_item(audio)
         graph = self.graph_class(self.size, self.fps, self.use_cache).draw(
             time_position, async_mode, audio, cache, *args, **kwargs
         )
@@ -139,6 +144,8 @@ class Visualization:
             cache.clear_graph_cache()
         elif self.clear_cache == "img":
             cache.clear_img_cache()
+        elif self.clear_cache == "audio":
+            cache.clear_audio_cache()
 
         collection = [None] * n
         took = [0] * n
@@ -252,3 +259,14 @@ class Visualization:
         elif isinstance(processed_frame, np.ndarray):
             plt.imshow(processed_frame)
             plt.show()
+
+    def cprofile(self, time_position: str | None = "0"):
+        """Profile the visualization"""
+        cProfile.runctx(
+            "self.process_frame(int(time_position), 'off')",
+            globals(),
+            locals(),
+            filename="profile_results.profile",  # Save results to a file
+            sort="cumulative",
+        )
+        return None

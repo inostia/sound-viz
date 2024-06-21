@@ -13,7 +13,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--mode",
         type=str,
-        choices=["video", "screen"],
+        choices=["cprofile", "video", "screen"],
         help="The mode to run the visualization in",
         default="screen",
     )
@@ -57,7 +57,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--clear-cache",
         type=str,
-        choices=["graph", "img", "all", "off"],
+        choices=["audio", "graph", "img", "all", "off"],
         help="Whether to clear the cache",
         default="off",
     )
@@ -122,6 +122,8 @@ if __name__ == "__main__":
         )
     elif args.mode == "screen":
         viz.display_screen(time_position=args.time_position)
+    elif args.mode == "cprofile":
+        viz.cprofile(time_position=args.time_position)
     else:
         print("Invalid mode.")
         exit()

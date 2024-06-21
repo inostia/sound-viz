@@ -2,12 +2,16 @@ import os
 import pickle
 import re
 import shutil
-from typing import Type
+from typing import TYPE_CHECKING, Type
 
 import numpy as np
+import redis
 from matplotlib import pyplot as plt
 
 from src.graphs.base import BaseGraph
+
+if TYPE_CHECKING:
+    from src.audio import Audio
 
 CACHE_DIR = ".cache/"
 GRAPH_CACHE_KEY = "graph"
@@ -23,6 +27,7 @@ class VizCache:
     graph_cache_files: list = []
     img_cache_dir: str = ""
     img_cache_files: list = []
+    redis: "redis.Redis" = None
 
     def __init__(self, filename: str, graph_class: Type[BaseGraph]):
         """Initialize the cache for a given audio file."""
@@ -35,6 +40,7 @@ class VizCache:
         os.makedirs(self.cache_dir, exist_ok=True)
         self._init_graph_cache()
         self._init_img_cache()
+        self.redis = redis.Redis()
 
     def _init_graph_cache(self):
         """Init the graph cache"""
@@ -79,25 +85,31 @@ class VizCache:
     # Public methods
     def clear_cache(self):
         """Clear the cache directory"""
-        print(f"Clearing cache directory: {self.cache_dir}")
-        for filename in os.listdir(self.cache_dir):
-            # remove any directories
-            if os.path.isdir(f"{self.cache_dir}{filename}"):
-                shutil.rmtree(f"{self.cache_dir}{filename}")
-            else:
-                os.remove(f"{self.cache_dir}{filename}")
+        self.clear_graph_cache()
+        self.clear_img_cache()
+        self.clear_audio_cache()
 
     def clear_graph_cache(self):
         """Clear the graph cache directory"""
         print(f"Clearing graph cache directory: {self.graph_cache_dir}")
+        if not os.path.exists(self.graph_cache_dir):
+            return
         for filename in os.listdir(self.graph_cache_dir):
             os.remove(f"{self.graph_cache_dir}{filename}")
 
     def clear_img_cache(self):
         """Clear the image cache directory"""
         print(f"Clearing image cache directory: {self.img_cache_dir}")
+        if not os.path.exists(self.img_cache_dir):
+            return
         for filename in os.listdir(self.img_cache_dir):
             os.remove(f"{self.img_cache_dir}{filename}")
+
+    def clear_audio_cache(self):
+        """Clear the audio cache"""
+        if not self.redis.exists(self.filename):
+            return 
+        self.redis.delete(self.filename)
 
     def get_graph_cache_item(self, i: int) -> np.ndarray | plt.Axes:
         """Return the graph cache item for a given index"""
@@ -135,3 +147,15 @@ class VizCache:
         """Save the image cache to a file so it can be used later"""
         img.figure.savefig(f"{self.img_cache_dir}{i}.png", dpi=300, facecolor="black")
         plt.close(img.figure)
+
+    def save_audio_cache_item(self, audio: "Audio"):
+        """Cache Audio object in Redis"""
+        audio_pickle = pickle.dumps(audio)
+        self.redis.set(self.filename, audio_pickle)
+
+    def get_audio_cache_item(self):
+        """Get Audio object from Redis"""
+        audio_pickle = self.redis.get(self.filename)
+        if audio_pickle is None:
+            return None
+        return pickle.loads(audio_pickle)
