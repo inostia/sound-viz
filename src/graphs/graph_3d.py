@@ -6,7 +6,7 @@ import numpy as np
 
 from src.audio import Audio
 from src.cache import VizCache
-from src.viz import DPI, init_plt
+from src.viz import DPI
 
 from .base import BaseGraph
 
@@ -223,7 +223,9 @@ class Graph3D(BaseGraph):
             import matplotlib.pyplot as plt
         else:
             import matplotlib.pyplot as plt
-        init_plt(plt)
+        # Set the background color to black
+        plt.rcParams["figure.facecolor"] = "black"
+        plt.rcParams["axes.facecolor"] = "black"
         # Create a 3D plot
         width = self.size / DPI
         height = self.size / DPI

@@ -17,15 +17,6 @@ from src.utils import generate_unique_filename
 DPI = 100
 
 
-def init_plt(plt):
-    plt.rcParams["figure.facecolor"] = "black"
-    plt.rcParams["axes.facecolor"] = "black"
-
-
-# Initialize the matplotlib settings
-init_plt(plt)
-
-
 class Visualization:
     """Class for visualizing audio data."""
 
