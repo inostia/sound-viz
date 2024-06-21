@@ -52,10 +52,15 @@ class Graph3D(BaseGraph):
 
         # Get the brightness of the points based on the mean amplitude
         sphere_brightness = self.get_brightness(time_position, audio)
+        sizes = []
+        colors = []
 
         # Calculate the amplitudes by band
         band_amplitudes = self.get_amplitudes(spectrum_data, band_indices)
 
+        # Get the camera position
+        elev_angle, azim_angle = self.get_rotation(time_position)
+        camera_position = self.get_camera_position(elev_angle, azim_angle)
 
         # Use vectorized operations to speed up the calculations iterate over bands
         for band_index, (start_index, end_index) in enumerate(band_indices):
@@ -92,13 +97,28 @@ class Graph3D(BaseGraph):
             # Adjust the position of the points
             points[start_index:end_index] *= adjusted_r
 
+            # Calculate the distance of each point from the origin
+            distances = self.calculate_distances(points[start_index:end_index], camera_position)
+
+            # Normalize the distances to [0,1]
+            distances = (distances - np.min(distances)) / (np.max(distances) - np.min(distances))
+
+            # Calculate the size of each point based on the distance
+            for distance in distances:
+                # size = distance * 0.5
+                size = distance * 1
+                sizes.append(size)
+                brightness = sphere_brightness * 0.8
+                colors.append((0, brightness, 0))
+
             # Plot the points
             X.extend(points[start_index:end_index, 0])
             Y.extend(points[start_index:end_index, 1])
             Z.extend(points[start_index:end_index, 2])
 
-        ax.scatter(X, Y, Z, color=(0, sphere_brightness, 0), s=0.1) 
-        
+        # Plot the points with the adjusted colors
+        ax.scatter(X, Y, Z, c=colors, s=sizes)
+
         ax.axis("off")
         # TODO: Fix the cache
         # cache.save_graph_cache_item(time_position, fig)
@@ -264,3 +284,25 @@ class Graph3D(BaseGraph):
         theta = np.arctan2(np.sqrt(x**2 + y**2), z)  # Inclination angle
         phi = np.arctan2(y, x)  # Azimuthal angle
         return r, theta, phi
+
+    def get_camera_position(self, elev_angle=0, azim_angle=0):
+        """Calculate the camera position in Cartesian coordinates."""
+        r = self.size
+        # theta = np.radians(elev_angle - 90)
+        # phi = np.radians(azim_angle + 90)
+        theta = np.radians(elev_angle)
+        phi = np.radians(azim_angle)
+
+        x = r * np.sin(theta) * np.cos(phi)
+        y = r * np.sin(theta) * np.sin(phi)
+        z = r * np.cos(theta)
+
+        return x, y, z
+
+    def calculate_distances(self, points, camera_position=(0, 0, 0)):
+        """Calculate the distance of each point from the origin."""
+        cx, cy, cz = camera_position
+        px, py, pz = points.T
+        distances = np.sqrt((px - cx) ** 2 + (py - cy) ** 2 + (pz - cz) ** 2)
+        distances = 1 - distances
+        return distances
