@@ -63,7 +63,8 @@ class Graph3D(BaseGraph):
 
         # Get the camera position
         elev_angle, azim_angle = self.get_rotation(time_position)
-        camera_position = self.get_camera_position(elev_angle, azim_angle)
+        camera_position = self.get_camera_position(elev_angle, azim_angle, max_r * 15)
+
         if TEST_CAMERA:
             self.test_camera(camera_position, min_r, ax)
             # ax.axis("off")
@@ -337,12 +338,9 @@ class Graph3D(BaseGraph):
         phi = np.arctan2(y, x)  # Azimuthal angle
         return r, theta, phi
 
-    def get_camera_position(self, elev_angle=0, azim_angle=0):
+    def get_camera_position(self, elev_angle=0, azim_angle=0, r=1):
         """Calculate the camera position in Cartesian coordinates."""
-        r = self.size
-        # theta = np.radians(elev_angle - 90)
-        # phi = np.radians(azim_angle + 90)
-        theta = np.radians(elev_angle)
+        theta = np.radians(90 - elev_angle)
         phi = np.radians(azim_angle)
 
         x = r * np.sin(theta) * np.cos(phi)
@@ -351,7 +349,7 @@ class Graph3D(BaseGraph):
 
         return x, y, z
 
-    def calculate_distances(self, points, camera_position=(0, 0, 0)):
+    def calculate_distances(self, points, camera_position=(0, 0, 0)) -> np.ndarray:
         """Calculate the distance of each point from the origin."""
         cx, cy, cz = camera_position
         px, py, pz = points.T
