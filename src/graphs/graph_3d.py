@@ -1,12 +1,15 @@
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 from src.audio import Audio
 from src.cache import VizCache
 from src.viz import DPI
 
 from .base import BaseGraph
+
+TEST_CAMERA = False
 
 
 class Graph3D(BaseGraph):
@@ -61,6 +64,10 @@ class Graph3D(BaseGraph):
         # Get the camera position
         elev_angle, azim_angle = self.get_rotation(time_position)
         camera_position = self.get_camera_position(elev_angle, azim_angle)
+        if TEST_CAMERA:
+            self.test_camera(camera_position, min_r, ax)
+            # ax.axis("off")
+            # return fig
 
         # Use vectorized operations to speed up the calculations iterate over bands
         for band_index, (start_index, end_index) in enumerate(band_indices):
@@ -123,6 +130,51 @@ class Graph3D(BaseGraph):
         # TODO: Fix the cache
         # cache.save_graph_cache_item(time_position, fig)
         return fig
+
+    def test_camera(
+        self, camera_position: tuple[int, int, int], min_r: int, ax: plt.Axes
+    ):
+        """Plot a test dot at the camera position with the size set to the distance from 0, 0, 0."""
+        camera_dist = np.linalg.norm(camera_position)
+        ax.scatter(*camera_position, c="red", s=camera_dist)
+
+        # Define the vertices of the cube
+        vertices = (
+            np.array(
+                [
+                    [-1, -1, -1],
+                    [-1, -1, 1],
+                    [-1, 1, -1],
+                    [-1, 1, 1],
+                    [1, -1, -1],
+                    [1, -1, 1],
+                    [1, 1, -1],
+                    [1, 1, 1],
+                ]
+            )
+            * min_r
+            * 0.5
+        )
+
+        # Define the faces of the cube
+        faces = [
+            [vertices[0], vertices[1], vertices[3], vertices[2]],
+            [vertices[4], vertices[5], vertices[7], vertices[6]],
+            [vertices[0], vertices[1], vertices[5], vertices[4]],
+            [vertices[2], vertices[3], vertices[7], vertices[6]],
+            [vertices[0], vertices[2], vertices[6], vertices[4]],
+            [vertices[1], vertices[3], vertices[7], vertices[5]],
+        ]
+
+        # Create a Poly3DCollection object where each face is a separate color
+        cube = Poly3DCollection(
+            faces,
+            facecolors=["white", "green", "blue", "yellow", "orange", "purple"],
+            edgecolors="k",
+        )
+
+        # Add the collection to the axes
+        ax.add_collection3d(cube)
 
     def get_amplitudes(self, spectrum_data: np.ndarray, band_indices: list[tuple[int, int]]) -> list[float]:
         """Calculate the amplitude of each band based on the spectrum data."""
