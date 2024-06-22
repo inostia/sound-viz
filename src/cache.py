@@ -1,12 +1,13 @@
 import os
 import pickle
 import re
-import shutil
+import time
 from typing import TYPE_CHECKING, Type
 
 import numpy as np
 import redis
 from matplotlib import pyplot as plt
+from redis.exceptions import ConnectionError as RedisConnectionError
 
 from src.graphs.base import BaseGraph
 
@@ -17,6 +18,21 @@ CACHE_DIR = ".cache/"
 GRAPH_CACHE_KEY = "graph"
 IMAGE_CACHE_KEY = "image"
 
+
+def handle_redis_errors(func):
+    """Decorator to handle Redis connection errors and retry the function."""
+    def wrapper(*args, **kwargs):
+        backoff = 1
+        max_backoff = 64
+        while backoff < max_backoff:
+            try:
+                return func(*args, **kwargs)
+            except RedisConnectionError:
+                print(f"Failed to connect to Redis. Retrying in {backoff} seconds.")
+                time.sleep(backoff)
+                backoff *= 2
+
+    return wrapper
 
 class VizCache:
     """File-based cache class to store the a cache used for the visualization of audio data"""
@@ -40,7 +56,12 @@ class VizCache:
         os.makedirs(self.cache_dir, exist_ok=True)
         self._init_graph_cache()
         self._init_img_cache()
-        self.redis = redis.Redis()
+        self._init_redis()
+    
+    @handle_redis_errors
+    def _init_redis(self):
+        """Init the Redis connection"""
+        self.redis = redis.Redis(host="localhost", port=6379, db=0)
 
     def _init_graph_cache(self):
         """Init the graph cache"""
@@ -105,9 +126,10 @@ class VizCache:
         for filename in os.listdir(self.img_cache_dir):
             os.remove(f"{self.img_cache_dir}{filename}")
 
+    @handle_redis_errors
     def clear_audio_cache(self):
         """Clear the audio cache"""
-        if not self.redis.exists(self.filename):
+        if not self.redis or not self.redis.exists(self.filename):
             return 
         self.redis.delete(self.filename)
 
@@ -148,14 +170,20 @@ class VizCache:
         img.figure.savefig(f"{self.img_cache_dir}{i}.png", dpi=300, facecolor="black")
         plt.close(img.figure)
 
+    @handle_redis_errors
     def save_audio_cache_item(self, audio: "Audio"):
         """Cache Audio object in Redis"""
         audio_pickle = pickle.dumps(audio)
+        if not self.redis:
+            return
         self.redis.set(self.filename, audio_pickle)
 
+    @handle_redis_errors
     def get_audio_cache_item(self):
         """Get Audio object from Redis"""
+        if not self.redis:
+            return
         audio_pickle = self.redis.get(self.filename)
         if audio_pickle is None:
-            return None
+            return
         return pickle.loads(audio_pickle)
