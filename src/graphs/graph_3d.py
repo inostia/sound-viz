@@ -1,10 +1,12 @@
+import pickle
+
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 from src.audio import Audio
-from src.cache import VizCache
+from src.cache import VizCache, handle_redis_errors
 from src.viz import DPI
 
 from .base import BaseGraph
@@ -272,7 +274,10 @@ class Graph3D(BaseGraph):
 
         return fig, ax
 
-    def get_brightness(self, time_position: int, audio: Audio) -> float:
+    @handle_redis_errors
+    def get_brightness(
+        self, time_position: int, audio: Audio, cache: VizCache
+    ) -> float:
         """Calculate the brightness of a point based on the amplitude."""
 
         # TODO: Calculate a gradient of brightness per frequency band
@@ -282,12 +287,23 @@ class Graph3D(BaseGraph):
             return 1 / (1 + np.exp(-x))
 
         # Create a bandpass filter to isolate the mid frequencies
-        low_cutoff, high_cutoff = 500, 1500
-        spectrogram, time_series = audio.highpass_filter(low_cutoff, order=9)
-        spectrogram, _ = audio.lowpass_filter(
-            high_cutoff, order=4, time_series=time_series
-        )
+        hp_cutoff, lp_cutoff = 500, 1500
+        hp_order, lp_order = 9, 4
+
+        # Check the cache for the spectrogram and time series
+        hp_lp_key = f"{audio.filename}:{audio.fps}:{hp_cutoff}:{lp_cutoff}:{hp_order}:{lp_order}:brightness_spectrogram"
+        if cache.redis.exists(hp_lp_key):
+            spectrogram = pickle.loads(cache.redis.get(hp_lp_key))
+        else:
+            spectrogram, time_series = audio.highpass_filter(hp_cutoff, order=hp_order)
+            spectrogram, _ = audio.lowpass_filter(
+                lp_cutoff, order=lp_order, time_series=time_series
+            )
+            cache.redis.set(hp_lp_key, pickle.dumps(spectrogram))
         mean_amplitudes = np.mean(spectrogram, axis=0)
+        max_mean = np.max(mean_amplitudes)
+        real_min = -74.34712432871528  # Empirical min value from clip3
+        min_mean = np.clip(np.min(mean_amplitudes), real_min, max_mean - 1)
         high_freq_amplitude = mean_amplitudes[time_position]
 
         # Normalize the amplitude
@@ -295,7 +311,7 @@ class Graph3D(BaseGraph):
         brightness_max = 1.0
         high_freq_amplitude = np.interp(
             high_freq_amplitude,
-            [np.min(mean_amplitudes), np.max(mean_amplitudes)],
+            [min_mean, max_mean],
             [brightness_min, brightness_max],
         )
 
