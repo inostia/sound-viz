@@ -75,6 +75,10 @@ class Graph3D(BaseGraph):
             if band_index >= num_bands - 1:
                 continue
 
+            if band_index == 0:
+                # Make the first band size 3 / 5 of the original size
+                start_index = end_index - end_index * 3 // 5
+
             band_amplitude = band_amplitudes[band_index]
 
             # Calculate the radius of the band
