@@ -18,6 +18,7 @@ class Audio:
     time_index_ratio: float = 0.0
     frequencies_index_ratio: float = 0.0
     bpm: float | None = None
+    fps: int = 30
     time_signature: str = "4/4"
     total_beats: int = 0
 
@@ -26,7 +27,8 @@ class Audio:
         self.time_series, self.sample_rate = librosa.load(filename)
         # Apply pre-emphasis to the audio signal
         self.time_series = librosa.effects.preemphasis(self.time_series, coef=0.66)
-        self.hop_length = int(self.sample_rate / fps)
+        self.fps = fps
+        self.hop_length = int(self.sample_rate / self.fps)
         self.stft = np.abs(
             librosa.stft(self.time_series, hop_length=self.hop_length, n_fft=2048 * 4)
         )
@@ -47,10 +49,11 @@ class Audio:
         self.frequencies_index_ratio = (
             len(self.frequencies) / self.frequencies[len(self.frequencies) - 1]
         )
-        if bpm is not None:
-            self.bpm = bpm
-        else:
-            self.bpm = self.detect_bpm()
+        # if bpm is not None:
+        #     self.bpm = bpm
+        # else:
+        #     self.bpm = self.detect_bpm()
+        self.bpm = bpm
         self.time_signature = time_signature
 
     def display_spectrogram(self):
@@ -149,6 +152,7 @@ class Audio:
 
     def get_beat(self, target_time: int, fps: int) -> float:
         """Get the beat at a given time"""
+        # TODO: use self.fps
         t = target_time / fps
         return self.bpm * t / 60
 

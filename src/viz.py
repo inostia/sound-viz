@@ -103,11 +103,11 @@ class Visualization:
         """Process a single frame of the visualization."""
         start_time = time.time()
         cache = VizCache(self.filename, self.graph_class)
-        if audio := cache.get_audio_cache_item():
+        if audio := cache.get_audio_cache(self.fps):
             pass
         else:
             audio = Audio(self.filename, self.bpm, self.time_signature, self.fps)
-            cache.save_audio_cache_item(audio)
+            cache.save_audio_cache(audio)
         graph = self.graph_class(self.size, self.fps, self.use_cache).draw(
             time_position, async_mode, audio, cache, *args, **kwargs
         )

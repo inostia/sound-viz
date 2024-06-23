@@ -170,20 +170,26 @@ class VizCache:
         img.figure.savefig(f"{self.img_cache_dir}{i}.png", dpi=300, facecolor="black")
         plt.close(img.figure)
 
+    def get_audio_cache_key(self, fps: int) -> str:
+        """Return the audio cache key"""
+        return f"{self.filename}:{fps}:audio"
+
     @handle_redis_errors
-    def save_audio_cache_item(self, audio: "Audio"):
+    def save_audio_cache(self, audio: "Audio"):
         """Cache Audio object in Redis"""
         audio_pickle = pickle.dumps(audio)
         if not self.redis:
             return
-        self.redis.set(self.filename, audio_pickle)
+        audio_key = self.get_audio_cache_key(audio.fps)
+        self.redis.set(audio_key, audio_pickle)
 
     @handle_redis_errors
-    def get_audio_cache_item(self):
+    def get_audio_cache(self, fps: int) -> "Audio":
         """Get Audio object from Redis"""
         if not self.redis:
             return
-        audio_pickle = self.redis.get(self.filename)
+        audio_key = self.get_audio_cache_key(fps)
+        audio_pickle = self.redis.get(audio_key)
         if audio_pickle is None:
             return
         return pickle.loads(audio_pickle)
