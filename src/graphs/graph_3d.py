@@ -36,32 +36,29 @@ class Graph3D(BaseGraph):
             return cached_img
 
         fig, ax = self.create_figure(time_position, async_mode)
-        X, Y, Z = [], [], []
-        min_r = self.size / 2
-        max_r = min_r * 2
 
         # Get the spectrum data for the current time position
         spectrum_data = self.get_sphere_spectrum(time_position, audio)
         points = self.fibonacci_sphere(len(spectrum_data))
+        num_points = len(points)
 
         # Separate into bands - define the number of frequency bands and the size of the gaps between them
         num_bands = 9
-        # gap_size = 5
         gap_size = 0
-        band_sizes, band_indices = self.get_band_sizes(
-            spectrum_data, num_bands, gap_size
-        )
-
-        # Initialize the total size covered so far and the current band index
         band_index = 0
-
-        # Get the brightness of the points based on the mean amplitude
-        sphere_brightness = self.get_brightness(time_position, audio)
-        sizes = []
-        colors = []
-
+        _, band_indices = self.get_band_sizes(spectrum_data, num_bands, gap_size)
         # Calculate the amplitudes by band
         band_amplitudes = self.get_amplitudes(spectrum_data, band_indices)
+
+        # Get the brightness of the points based on the mean amplitude
+        sphere_brightness = self.get_brightness(time_position, audio, cache)
+        sizes = np.zeros(num_points)
+        colors = np.zeros((num_points, 4))
+
+        # Initialize the X, Y, Z coordinates
+        X, Y, Z = np.zeros(num_points), np.zeros(num_points), np.zeros(num_points)
+        min_r = self.size / 2
+        max_r = min_r * 2
 
         # Get the camera position
         elev_angle, azim_angle = self.get_rotation(time_position)
@@ -113,18 +110,18 @@ class Graph3D(BaseGraph):
             # Normalize the distances to [0,1]
             distances = (distances - np.min(distances)) / (np.max(distances) - np.min(distances))
 
-            # Calculate the size of each point based on the distance
-            for distance in distances:
-                # size = distance * 0.5
-                size = distance * 1
-                sizes.append(size)
-                brightness = sphere_brightness * 0.8
-                colors.append((0, brightness, 0))
+            # Vectorized calculation of sizes based on distances
+            distance_size_factor = 1.2
+            min_size = 0.3
+            sizes = np.append(sizes, min_size + distances * distance_size_factor)
 
-            # Plot the points
-            X.extend(points[start_index:end_index, 0])
-            Y.extend(points[start_index:end_index, 1])
-            Z.extend(points[start_index:end_index, 2])
+            rgba = np.array([0, sphere_brightness, 0, 1])
+            colors = np.vstack([colors, np.tile(rgba, (distances.shape[0], 1))])
+
+            # Plot the points - assuming X, Y, Z are lists that are extended with points coordinates
+            X = np.append(X, points[start_index:end_index, 0])
+            Y = np.append(Y, points[start_index:end_index, 1])
+            Z = np.append(Z, points[start_index:end_index, 2])
 
         # Plot the points with the adjusted colors
         ax.scatter(X, Y, Z, c=colors, s=sizes)
