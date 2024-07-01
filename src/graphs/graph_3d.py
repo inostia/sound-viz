@@ -6,7 +6,7 @@ import numpy as np
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 from src.audio import Audio
-from src.cache import VizCache, handle_redis_errors
+from src.cache import VizCache, redis_connect
 from src.viz import DPI
 
 from .base import BaseGraph
@@ -275,7 +275,7 @@ class Graph3D(BaseGraph):
 
         return fig, ax
 
-    @handle_redis_errors
+    @redis_connect
     def get_brightness(
         self, time_position: int, audio: Audio, cache: VizCache
     ) -> float:

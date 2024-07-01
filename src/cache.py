@@ -19,7 +19,7 @@ GRAPH_CACHE_KEY = "graph"
 IMAGE_CACHE_KEY = "image"
 
 
-def handle_redis_errors(func):
+def redis_connect(func):
     """Decorator to handle Redis connection errors and retry the function."""
     def wrapper(*args, **kwargs):
         backoff = 1
@@ -58,7 +58,7 @@ class VizCache:
         self._init_img_cache()
         self._init_redis()
     
-    @handle_redis_errors
+    @redis_connect
     def _init_redis(self):
         """Init the Redis connection"""
         self.redis = redis.Redis(host="localhost", port=6379, db=0)
@@ -126,7 +126,7 @@ class VizCache:
         for filename in os.listdir(self.img_cache_dir):
             os.remove(f"{self.img_cache_dir}{filename}")
 
-    @handle_redis_errors
+    @redis_connect
     def clear_audio_cache(self):
         """Clear the audio cache"""
         if not self.redis or not self.redis.exists(self.filename):
@@ -174,7 +174,7 @@ class VizCache:
         """Return the audio cache key"""
         return f"{self.filename}:{fps}:audio"
 
-    @handle_redis_errors
+    @redis_connect
     def save_audio_cache(self, audio: "Audio"):
         """Cache Audio object in Redis"""
         audio_pickle = pickle.dumps(audio)
@@ -183,7 +183,7 @@ class VizCache:
         audio_key = self.get_audio_cache_key(audio.fps)
         self.redis.set(audio_key, audio_pickle)
 
-    @handle_redis_errors
+    @redis_connect
     def get_audio_cache(self, fps: int) -> "Audio":
         """Get Audio object from Redis"""
         if not self.redis:
