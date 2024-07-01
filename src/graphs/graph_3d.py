@@ -240,7 +240,7 @@ class Graph3D(BaseGraph):
         elev_angle *= slow_factor
         azim_angle *= slow_factor
 
-        return elev_angle, azim_angle
+        return elev_angle, -azim_angle
 
     def create_figure(
         self, time_position: int, async_mode: str = "off"
