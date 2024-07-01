@@ -39,7 +39,7 @@ class Graph3D(BaseGraph):
 
         # Get the spectrum data for the current time position
         spectrum_data = self.get_sphere_spectrum(time_position, audio)
-        points = self.fibonacci_sphere(len(spectrum_data))
+        points = self.get_shape(len(spectrum_data), cache)
         num_points = len(points)
 
         # Separate into bands - define the number of frequency bands and the size of the gaps between them
@@ -333,24 +333,40 @@ class Graph3D(BaseGraph):
             [0, 1],
         )
 
-    def fibonacci_sphere(self, samples=1000) -> np.ndarray:
+    def get_shape(self, samples, cache: VizCache) -> np.ndarray:
         """Generate a Fibonacci sphere of points."""
+        shape = "sphere"
+        # shape = "cube"
+
+
         # TODO: Instead of a Fibonacci sphere, use a geodesic sphere or a cube sphere
-        points = []
-        phi = np.pi * (np.sqrt(5.0) - 1.0)  # golden angle in radians
+        points = np.zeros((samples, 3))
 
-        for i in range(samples):
-            y = 1 - (i / float(samples - 1)) * 2  # y goes from 1 to -1
-            radius = np.sqrt(1 - y * y)  # radius at y
+        if shape == "sphere":
+            # Fibonacci sphere
+            phi = np.pi * (np.sqrt(5.0) - 1.0)  # golden angle in radians
+            for i in range(samples):
+                y = 1 - (i / float(samples - 1)) * 2  # y goes from 1 to -1
+                radius = np.sqrt(1 - y * y)  # radius at y
+                theta = phi * i  # golden angle increment
+                x = np.cos(theta) * radius
+                z = np.sin(theta) * radius
+                points[i] = [x, y, z]
+        elif shape == "cube":
+            # Cube sphere
+            for i in range(samples):
+                x = 2 * np.random.rand() - 1
+                y = 2 * np.random.rand() - 1
+                z = 2 * np.random.rand() - 1
+                norm = np.sqrt(x ** 2 + y ** 2 + z ** 2)
+                x /= norm
+                y /= norm
+                z /= norm
+                points[i] = [x, y, z]
+        # TODO: Add a continuous sphere that has waves or rippling effects
+        
 
-            theta = phi * i  # golden angle increment
-
-            x = np.cos(theta) * radius
-            z = np.sin(theta) * radius
-
-            points.append([x, y, z])
-
-        return np.array(points)
+        return points
 
     def cartesian_to_spherical(self, x, y, z):
         r = np.sqrt(x**2 + y**2 + z**2)
