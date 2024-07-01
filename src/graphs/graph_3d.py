@@ -121,13 +121,16 @@ class Graph3D(BaseGraph):
 
             rgba = np.array([0, sphere_brightness, 0, 1])
             colors = np.vstack([colors, np.tile(rgba, (distances.shape[0], 1))])
+            # Scale alpha based on the distance from the camera
+            alpha = 1 - distances
+            colors[start_index:end_index, 3] = alpha
 
             # Plot the points - assuming X, Y, Z are lists that are extended with points coordinates
             X = np.append(X, points[start_index:end_index, 0])
             Y = np.append(Y, points[start_index:end_index, 1])
             Z = np.append(Z, points[start_index:end_index, 2])
 
-        # Plot the points with the adjusted colors
+        # Plot the points with the adjusted colors and sizes
         ax.scatter(X, Y, Z, c=colors, s=sizes)
 
         ax.axis("off")
