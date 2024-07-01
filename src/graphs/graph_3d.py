@@ -333,11 +333,15 @@ class Graph3D(BaseGraph):
             [0, 1],
         )
 
+    @redis_connect
     def get_shape(self, samples, cache: VizCache) -> np.ndarray:
         """Generate a Fibonacci sphere of points."""
         shape = "sphere"
         # shape = "cube"
 
+        shape_key = f"{cache.filename}:{shape}:{samples}"
+        if cache.redis.exists(shape_key):
+            return pickle.loads(cache.redis.get(shape_key))
 
         # TODO: Instead of a Fibonacci sphere, use a geodesic sphere or a cube sphere
         points = np.zeros((samples, 3))
@@ -365,6 +369,7 @@ class Graph3D(BaseGraph):
                 points[i] = [x, y, z]
         # TODO: Add a continuous sphere that has waves or rippling effects
         
+        cache.redis.set(shape_key, pickle.dumps(points))
 
         return points
 
